@@ -1,16 +1,16 @@
-# Gas al Paso — FASE 3: flujo de ventas
+# Gas al Paso — FASE 4: control diario
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
-Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos y tarreo.
+Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos, tarreo, cargas, cierre y cuadratura diaria.
 El frontend todavía muestra únicamente **Gas al Paso**: sus pantallas comerciales
 corresponden a una fase posterior.
 
-## Actualizar desde FASE 2 (sin borrar datos)
+## Actualizar desde FASE 3 (sin borrar datos)
 
-Seguir [las instrucciones de FASE 3](docs/FASE-3.md#actualizar-desde-fase-2-sin-borrar-datos):
-conservar `.env` y JWT_SECRET, aplicar **solo** `.scripts/aplicar-ventas.sh` y reconstruir
+Seguir [las instrucciones de FASE 4](docs/FASE-4.md#actualizar-desde-fase-3-sin-borrar-las-bases):
+conservar `.env` y JWT_SECRET, aplicar **solo** `.scripts/aplicar-control.sh` y reconstruir
 la API. **No ejecutar `down -v` ni el legacy para esta actualización.** Si todavía
-se usa FASE 1, agregar JWT_SECRET como explica FASE 2; el actualizador incluye 07 y 08.
+se usa FASE 1, agregar JWT_SECRET como explica FASE 2; el actualizador incluye 07, 08 y 09.
 Los ejemplos completos de cada endpoint están en [docs/api.http](docs/api.http).
 
 ## Descargar y abrir en VS Code
@@ -135,12 +135,12 @@ Maipú, Puente Alto y La Cisterna. Nombres, teléfonos y direcciones de clientes
 
 ## Modelo y scripts
 
-Ver [documentación de FASE 3](docs/FASE-3.md) para carrito, ventas y actualización aditiva; [FASE 2](docs/FASE-2.md) para JWT y administración; y [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
+Ver [documentación de FASE 4](docs/FASE-4.md) para control diario y cierre; [documentación de FASE 3](docs/FASE-3.md) para carrito, ventas y actualización aditiva; [FASE 2](docs/FASE-2.md) para JWT y administración; y [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
 `PkgVentas`, datos cruzados de ejemplo, cuadratura y reintentos de sincronización.
 
 Oracle monta `db/oracle/` en `/container-entrypoint-initdb.d`. Su lanzador
 `00-inicializar.sh` conecta como usuario de aplicación y ejecuta los SQL numerados
-01–08 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
+01–09 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
 oficial los ejecute además como SYS. No omitirla al copiar el proyecto.
 El archivo legacy original permanece intacto en `db/oracle/legacy/` y se ejecuta
 explícitamente desde el script 01, incluidas sus pruebas y su rollback.
@@ -149,6 +149,20 @@ Los scripts Oracle son **ordenados para instalación limpia**, no migraciones
 idempotentes sobre una base existente. La semilla Mongo usa upserts para no duplicar datos.
 
 ## Ejecutar las pruebas
+
+Control diario de FASE 4 (crea repartidores, cargas, ventas y cierres ficticios):
+
+```powershell
+Get-Content -Raw api/tests/control.mjs | docker compose exec -T api node --input-type=module
+```
+
+CRUD Mongo con salida de ejemplo en [docs/crud-mongo.md](docs/crud-mongo.md):
+
+```powershell
+docker compose exec -T mongo mongosh --quiet --file /docker-entrypoint-initdb.d/.examples/crud-demo.js
+```
+
+Se usa una base de demostración separada; no modifica las ventas reales.
 
 Para el flujo de ventas de FASE 3 (solo bases demo, crea ventas y auditoría de prueba):
 

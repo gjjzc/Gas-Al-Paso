@@ -3,6 +3,7 @@ import { consultar, conConexion, transaccion } from './oracle.js';
 import { leerPedido } from './ventas.js';
 import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
 import { exigir } from '../middlewares/validar.js';
+import { asegurarDiaAbierto } from './jornada.js';
 
 function puedeVer(usuario, venta, pedido) {
   return usuario.rol === 'ADMIN' ||
@@ -82,6 +83,7 @@ export async function asignar(usuario, id, empleado) {
       WHERE e.id_empleado=:id AND u.rol='REPARTIDOR' AND u.activo=1`, { id: empleado });
     exigir(repartidor, 'Repartidor activo no encontrado.', 404);
     if (pedido.estado === 'ASIGNADO' && pedido.repartidor?.id_empleado === empleado) return sinCambios(c, pedido);
+    await asegurarDiaAbierto(c, empleado);
     await c.execute('BEGIN PkgVentas.AsignarRepartidor(:venta,:empleado); END;', { venta: pedido.id_venta, empleado });
     const cambio = await guardar(c, { ...pedido, repartidor }, 'ASIGNADO', usuario);
     cambio.eventos.push(await auditar(c, 'ASIGNACION', usuario, { id_venta: pedido.id_venta, id_pedido: id, id_empleado: empleado }));
@@ -100,6 +102,7 @@ export async function cambiarEstado(usuario, id, estado, metodo) {
     const siguiente = { ASIGNADO: 'EN_CAMINO', EN_CAMINO: 'ENTREGADO' };
     exigir(siguiente[pedido.estado] === estado, `Transicion no permitida: ${pedido.estado} -> ${estado}.`, 409);
     exigir(pedido.repartidor, 'El pedido necesita un repartidor asignado.', 409);
+    await asegurarDiaAbierto(c, venta.id_empleado);
     if (estado === 'ENTREGADO') {
       await c.execute('BEGIN PkgVentas.CobrarVenta(:venta,:metodo); END;', { venta: pedido.id_venta, metodo });
       pedido.estado_pago = 'COBRADA';

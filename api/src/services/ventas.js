@@ -8,13 +8,14 @@ import { bloquearCliente, leerCarrito, versionCarrito } from './carrito.js';
 import { exigir } from '../middlewares/validar.js';
 import { ErrorHttp } from '../middlewares/errores.js';
 import { lineas } from '../middlewares/validar-ventas.js';
+import { asegurarDiaAbierto } from './jornada.js';
 
 function huella(valor) {
   return createHash('sha256').update(JSON.stringify(valor)).digest('hex');
 }
 export async function leerVenta(c, id) {
   const [venta] = await consultar(c, `SELECT v.id_venta,v.fecha_venta,v.canal,v.id_cliente,v.id_empleado,
-    e.nombre repartidor_nombre,v.estado_pago,v.metodo_pago,v.subtotal,v.descuento,v.total_venta total,v.id_pedido_mongo
+    e.nombre repartidor_nombre,v.estado_pago,v.metodo_pago,v.fecha_cobro,v.subtotal,v.descuento,v.total_venta total,v.id_pedido_mongo
     FROM Venta v JOIN Empleado e ON e.id_empleado=v.id_empleado WHERE v.id_venta=:id`, { id });
   exigir(venta, 'Venta no encontrada.', 404);
   venta.items = await consultar(c, `SELECT d.id_producto,p.nombre,d.cantidad,d.precio_unitario,d.subtotal,d.descuento,d.total_venta total
@@ -113,6 +114,7 @@ export async function crearVenta(usuario, canal, datos, claveSolicitada) {
         exigir(admin, 'No hay un administrador activo para recibir el pedido.', 409);
         empleado = admin.id_empleado;
       }
+      if (canal === 'TARREO') await asegurarDiaAbierto(c, empleado);
       const cliente = canal === 'TARREO' ? null : await datosCliente(c, canal === 'WEB' ? usuario.id_cliente : datos.id_cliente);
       const direccion = canal === 'TARREO' ? null : await datosDireccion(c, datos.direccion_entrega);
       const idMongo = canal === 'TARREO' ? null : new ObjectId().toHexString();
@@ -199,7 +201,7 @@ export async function ventasDia(usuario, filtros) {
     }
     const binds = { fecha, empleado, canal: filtros.canal || null, pago: filtros.estado_pago || null };
     const condicion = `estado_registro='CONFIRMADA'
-      AND fecha_venta>=TO_DATE(:fecha,'YYYY-MM-DD') AND fecha_venta<TO_DATE(:fecha,'YYYY-MM-DD')+1
+      AND NVL(fecha_cobro,fecha_venta)>=TO_DATE(:fecha,'YYYY-MM-DD') AND NVL(fecha_cobro,fecha_venta)<TO_DATE(:fecha,'YYYY-MM-DD')+1
       AND (:empleado IS NULL OR id_empleado=:empleado) AND (:canal IS NULL OR canal=:canal)
       AND (:pago IS NULL OR estado_pago=:pago)`;
     const [resumen] = await consultar(c, `SELECT COUNT(*) cantidad_ventas,
