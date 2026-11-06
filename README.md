@@ -1,10 +1,16 @@
-# Gas al Paso — FASE 1: bases de datos
+# Gas al Paso — FASE 2: API base
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
-Node.js + Express, Oracle Free (driver thin) y MongoDB 7. Esta fase prepara el
-modelo y sus datos: el frontend todavía muestra únicamente **Gas al Paso** y
-la API implementa únicamente `GET /api/health`. Login y pantallas comerciales
-corresponden a fases posteriores.
+Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API ya implementa login, registro, JWT/roles, catálogo y administración.
+El frontend todavía muestra únicamente **Gas al Paso**: sus pantallas comerciales
+corresponden a una fase posterior.
+
+## Actualizar desde FASE 1 (sin borrar datos)
+
+Seguir [las instrucciones de FASE 2](docs/FASE-2.md#actualizar-desde-fase-1-sin-perder-datos):
+agregar JWT_SECRET a `.env`, aplicar **solo** `.scripts/aplicar-api.sh` y reconstruir
+la API. **No ejecutar `down -v` ni el legacy para esta actualización.**
+Los ejemplos completos de cada endpoint están en [docs/api.http](docs/api.http).
 
 ## Descargar y abrir en VS Code
 
@@ -12,7 +18,8 @@ corresponden a fases posteriores.
 2. Descargar el proyecto, descomprimir y abrir en VS Code la carpeta que contiene `docker-compose.yml`.
 3. Abrir **Terminal → Nueva terminal** en esa carpeta (no dentro de `api` ni `frontend`).
 4. Copiar `.env.example` a `.env` y completar `ORACLE_PASSWORD`, `APP_USER_PASSWORD` y `MONGO_INITDB_ROOT_PASSWORD` con contraseñas locales fuertes y distintas. Mantener `APP_USER=gas_app` y `MONGO_INITDB_ROOT_USERNAME=gas_admin`, salvo que se quieran personalizar los usuarios. El nombre de usuario Oracle admite letras, números y guion bajo, empezando por letra; su contraseña no debe contener comillas dobles ni saltos de línea (limitación del arranque SQLPlus).
-5. Los puertos externos predeterminados son Oracle **1522** y Mongo **27017**. Si están ocupados en tu PC, cambiar en `.env`:
+5. Generar `JWT_SECRET` aleatorio de al menos 32 bytes en `.env`, usando el bloque PowerShell de [FASE 2](docs/FASE-2.md). No compartirlo ni subirlo a Git.
+6. Los puertos externos predeterminados son Oracle **1522** y Mongo **27017**. Si están ocupados en tu PC, cambiar en `.env`:
 
 ```dotenv
 ORACLE_HOST_PORT=1523
@@ -24,7 +31,7 @@ No escribir contraseñas reales en Compose ni subir `.env` a Git.
 
 ## Inicializar desde cero
 
-Los scripts se ejecutan automáticamente **solo al crear volúmenes nuevos**.
+Para una instalación nueva, los scripts se ejecutan automáticamente **solo al crear volúmenes nuevos**. Completar también JWT_SECRET antes de ejecutar Compose.
 Para pasar del esquema vacío de FASE 0 a FASE 1 se necesita reinicializar las bases.
 **El siguiente `down -v` elimina todos los datos de este proyecto. Respaldar antes
 cualquier dato que se quiera conservar.** Ejecutar únicamente desde la carpeta correcta:
@@ -111,7 +118,7 @@ El borrado TTL es asíncrono: puede tardar alrededor de un minuto después de ex
 **Estas credenciales son públicas, solo para desarrollo y nunca para producción.**
 Todas usan la contraseña ficticia **`GasPasoDemo2026!`**. En Oracle solo se guardan
 hashes bcrypt distintos, con costo 12. Son usuarios de la aplicación, no usuarios
-para SQL Developer ni Compass. El login se implementará en FASE 2.
+para SQL Developer ni Compass. El login ya funciona mediante `POST /api/auth/login`; todavía no hay pantalla de login.
 
 | Email | Rol | Vínculo |
 | --- | --- | --- |
@@ -127,12 +134,12 @@ Maipú, Puente Alto y La Cisterna. Nombres, teléfonos y direcciones de clientes
 
 ## Modelo y scripts
 
-Ver [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
+Ver [documentación de FASE 2](docs/FASE-2.md) para endpoints, JWT y actualización aditiva; y [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
 `PkgVentas`, datos cruzados de ejemplo, cuadratura y reintentos de sincronización.
 
 Oracle monta `db/oracle/` en `/container-entrypoint-initdb.d`. Su lanzador
 `00-inicializar.sh` conecta como usuario de aplicación y ejecuta los SQL numerados
-01–06 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
+01–07 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
 oficial los ejecute además como SYS. No omitirla al copiar el proyecto.
 El archivo legacy original permanece intacto en `db/oracle/legacy/` y se ejecuta
 explícitamente desde el script 01, incluidas sus pruebas y su rollback.
@@ -141,6 +148,16 @@ Los scripts Oracle son **ordenados para instalación limpia**, no migraciones
 idempotentes sobre una base existente. La semilla Mongo usa upserts para no duplicar datos.
 
 ## Ejecutar las pruebas
+
+Para la API de FASE 2, ver [la suite funcional](docs/FASE-2.md#pruebas-funcionales).
+Desde PowerShell:
+
+```powershell
+Get-Content -Raw api/tests/api.mjs | docker compose exec -T api node --input-type=module
+```
+
+Las pruebas relacionales/integradas de FASE 1 siguientes requieren datos recién
+sembrados y deben ejecutarse **antes** de la suite API, que crea usuarios y productos demo.
 
 La suite Oracle comprueba descuentos, stock, anulaciones, protección de ventas,
 cobro, auditoría y cuadratura. Hace rollback de sus cambios:
