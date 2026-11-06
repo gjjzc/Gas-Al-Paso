@@ -1,0 +1,194 @@
+# Ejemplos para VS Code con la extension REST Client.
+# Ejecutar primero los login y la creacion del producto/usuario para obtener sus IDs.
+# Solo datos y contrasenas ficticias de desarrollo. JWT_SECRET nunca se envia al cliente.
+@base = http://localhost:4000/api
+@tokenAdmin = {{loginAdmin.response.body.$.token}}
+@tokenCliente = {{loginCliente.response.body.$.token}}
+@tokenRepartidor = {{loginRepartidor.response.body.$.token}}
+@idProducto = {{crearProducto.response.body.$.id_producto}}
+@idUsuario = {{crearUsuario.response.body.$.id_usuario}}
+@idEmpleado = {{crearUsuario.response.body.$.id_empleado}}
+
+### Salud publica: HTTP 200 si ambas bases responden
+GET {{base}}/health
+
+### Login ADMIN
+# @name loginAdmin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"admin@demo.gasalpaso.test","password":"GasPasoDemo2026!"}
+
+### Login CLIENTE
+# @name loginCliente
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"ana@demo.gasalpaso.test","password":"GasPasoDemo2026!"}
+
+### Login REPARTIDOR
+# @name loginRepartidor
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"camila@demo.gasalpaso.test","password":"GasPasoDemo2026!"}
+
+### Usuario autenticado (funciona con cualquiera de los tres tokens)
+GET {{base}}/auth/me
+Authorization: Bearer {{tokenCliente}}
+
+### Registro publico: solo CLIENTE; usar otro email si ya existe
+POST {{base}}/auth/registro
+Content-Type: application/json
+
+{
+  "nombre":"Cliente de ejemplo",
+  "email":"nuevo-cliente@demo.gasalpaso.test",
+  "password":"ClaveClienteDemo2026!",
+  "telefono":"+56900000999",
+  "direccion_principal":"Calle Ejemplo 999",
+  "id_comuna":1
+}
+
+### Catalogo publico: precio y stock actuales desde Oracle
+GET {{base}}/catalogo?limite=20&offset=0
+
+### Filtrar categoria GAS o ACCESORIO
+GET {{base}}/catalogo?categoria=GAS
+
+### Detalle publico
+GET {{base}}/catalogo/1
+
+### Incluir bajas: requiere ADMIN
+GET {{base}}/catalogo?incluir_inactivos=true
+Authorization: Bearer {{tokenAdmin}}
+
+### Crear producto: ADMIN, HTTP 201. Se genera id_producto en Oracle.
+# @name crearProducto
+POST {{base}}/catalogo
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "nombre":"Gas 5kg demostracion API",
+  "descripcion":"Producto ficticio para probar el CRUD",
+  "categoria":"GAS",
+  "peso":5,
+  "precio":8500,
+  "stock":20,
+  "atributos":{"peso_kg":5,"demo":true},
+  "destacado":false,
+  "activo":true
+}
+
+### Editar producto: ADMIN, PUT acepta campos parciales
+PUT {{base}}/catalogo/{{idProducto}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nombre":"Gas 5kg editado","precio":9000,"stock":18,"destacado":true}
+
+### Editar solo precio/stock/activo de Oracle: ADMIN
+PATCH {{base}}/productos/{{idProducto}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"precio":9500,"stock":16,"activo":true}
+
+### Baja logica: ADMIN. Conserva detalle de ventas y auditoria.
+DELETE {{base}}/catalogo/{{idProducto}}
+Authorization: Bearer {{tokenAdmin}}
+
+### Ver producto dado de baja: ADMIN
+GET {{base}}/catalogo/{{idProducto}}?incluir_inactivos=true
+Authorization: Bearer {{tokenAdmin}}
+
+### Reactivar producto
+PATCH {{base}}/productos/{{idProducto}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"activo":true}
+
+### Comunas publicas
+GET {{base}}/comunas
+
+### Usuarios: ADMIN, nunca devuelve password_hash ni token_version
+GET {{base}}/usuarios?limite=50&offset=0
+Authorization: Bearer {{tokenAdmin}}
+
+### Crear repartidor: ADMIN. Tambien admite ADMIN o CLIENTE.
+# @name crearUsuario
+POST {{base}}/usuarios
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "email":"repartidor-nuevo@demo.gasalpaso.test",
+  "password":"ClaveRepartidorDemo2026!",
+  "nombre":"Repartidor de ejemplo",
+  "rol":"REPARTIDOR",
+  "activo":true,
+  "comunas":[1,2]
+}
+
+### Editar usuario: ADMIN
+PATCH {{base}}/usuarios/{{idUsuario}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nombre":"Repartidor editado","email":"repartidor-editado@demo.gasalpaso.test"}
+
+### Desactivar usuario: revoca sesiones existentes
+PATCH {{base}}/usuarios/{{idUsuario}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"activo":false}
+
+### Reactivar para poder cambiar su cobertura
+PATCH {{base}}/usuarios/{{idUsuario}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"activo":true}
+
+### Repartidores activos: los que cubren comuna=1 aparecen primero
+GET {{base}}/repartidores?comuna=1
+Authorization: Bearer {{tokenAdmin}}
+
+### Reemplazar cobertura de un repartidor (id de EMPLEADO, no de usuario)
+PUT {{base}}/repartidores/{{idEmpleado}}/comunas
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"comunas":[1,3,7]}
+
+### Ver auditoria de cambios de precio: ADMIN
+GET {{base}}/auditoria?tipo=CAMBIO_PRECIO&limite=50
+Authorization: Bearer {{tokenAdmin}}
+
+### Ver auditoria de cambios de stock
+GET {{base}}/auditoria?tipo=CAMBIO_STOCK
+Authorization: Bearer {{tokenAdmin}}
+
+### Reintento de pendientes Oracle -> Mongo: ADMIN (tambien automatico cada 5 segundos)
+POST {{base}}/sincronizacion/reintentar
+Authorization: Bearer {{tokenAdmin}}
+
+### Prueba de permisos: CLIENTE debe recibir HTTP 403
+POST {{base}}/catalogo
+Authorization: Bearer {{tokenCliente}}
+Content-Type: application/json
+
+{}
+
+### Prueba de token: debe devolver HTTP 401
+GET {{base}}/auth/me
+
+### Prueba de validacion: ADMIN debe recibir HTTP 400
+PATCH {{base}}/productos/1
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"stock":-1}

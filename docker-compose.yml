@@ -42,6 +42,7 @@ services:
     build: ./api
     environment:
       PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:?Completa JWT_SECRET en .env}
       ORACLE_USER: ${APP_USER:-gas_app}
       ORACLE_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
       ORACLE_CONNECT_STRING: oracle:1521/FREEPDB1
