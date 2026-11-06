@@ -20,6 +20,16 @@ import { Tarreo } from './pages/repartidor/Tarreo.jsx';
 import { VentasDia } from './pages/repartidor/VentasDia.jsx';
 import { Cierre } from './pages/repartidor/Cierre.jsx';
 import { Pedidos, Pedido } from './pages/Pedidos.jsx';
+import { LayoutAdmin } from './components/Admin.jsx';
+import { Tablero } from './pages/admin/Tablero.jsx';
+import { PedidoAdmin } from './pages/admin/PedidoAdmin.jsx';
+import { Llamada } from './pages/admin/Llamada.jsx';
+import { Cargas } from './pages/admin/Cargas.jsx';
+import { Productos } from './pages/admin/Productos.jsx';
+import { Usuarios } from './pages/admin/Usuarios.jsx';
+import { Cobertura } from './pages/admin/Cobertura.jsx';
+import { Cuadratura } from './pages/admin/Cuadratura.jsx';
+import { Auditoria } from './pages/admin/Auditoria.jsx';
 function Protegida({ roles }) {
   const auth = useAuth();
   const location = useLocation();
@@ -38,9 +48,11 @@ function SinAcceso({ roles }) {
   return (
     <Tarjeta className="vacio">
       <h1>
-        {roles?.includes('REPARTIDOR')
-          ? 'Esta sección es para repartidores'
-          : 'Esta sección es para clientes'}
+        {roles?.includes('ADMIN')
+          ? 'Esta sección es para administradores'
+          : roles?.includes('REPARTIDOR')
+            ? 'Esta sección es para repartidores'
+            : 'Esta sección es para clientes'}
       </h1>
       <p>Tu cuenta no tiene acceso a esta pantalla.</p>
       <EnlaceBoton to="/mi-espacio">Ir a mi espacio</EnlaceBoton>
@@ -49,6 +61,7 @@ function SinAcceso({ roles }) {
 }
 function Espacio() {
   const { usuario } = useAuth();
+  if (usuario.rol === 'ADMIN') return <Navigate to="/admin/pedidos" replace />;
   if (usuario.rol === 'REPARTIDOR')
     return <Navigate to="/repartidor/pedidos" replace />;
   return (
@@ -66,10 +79,7 @@ function Espacio() {
       <Tarjeta>
         <h2>Hola, {usuario.nombre}</h2>
         <p>Tu sesión está activa con el rol {usuario.rol}.</p>
-        <p>
-          Las pantallas de administración se incorporarán en las siguientes
-          fases. Sus funciones actuales están disponibles en la API.
-        </p>
+        <p>Desde tu cuenta puedes consultar el catálogo y tus pedidos.</p>
         <EnlaceBoton to="/catalogo" variante="secundario">
           Ver catálogo
         </EnlaceBoton>
@@ -114,6 +124,20 @@ export function App() {
             <Route path="tarreo" element={<Tarreo />} />
             <Route path="ventas" element={<VentasDia />} />
             <Route path="cierre" element={<Cierre />} />
+          </Route>
+        </Route>
+        <Route element={<Protegida roles={['ADMIN']} />}>
+          <Route path="admin" element={<LayoutAdmin />}>
+            <Route index element={<Navigate to="pedidos" replace />} />
+            <Route path="pedidos" element={<Tablero />} />
+            <Route path="pedidos/:id" element={<PedidoAdmin />} />
+            <Route path="llamada" element={<Llamada />} />
+            <Route path="cargas" element={<Cargas />} />
+            <Route path="productos" element={<Productos />} />
+            <Route path="usuarios" element={<Usuarios />} />
+            <Route path="cobertura" element={<Cobertura />} />
+            <Route path="cuadratura" element={<Cuadratura />} />
+            <Route path="auditoria" element={<Auditoria />} />
           </Route>
         </Route>
         <Route element={<Protegida />}>

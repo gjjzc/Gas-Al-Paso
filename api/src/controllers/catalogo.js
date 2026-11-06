@@ -31,7 +31,7 @@ function validar(cuerpo, alta = false, soloOracle = false) {
 export async function listar(req, res) {
   const categoria = req.query.categoria;
   exigir(categoria === undefined || ['GAS', 'ACCESORIO'].includes(categoria), 'Categoria invalida.');
-  res.json(await servicio.listar({ ...paginacion(req.query), categoria, incluirInactivos: req.incluirInactivos }));
+  res.json(await servicio.listar({ ...paginacion(req.query), categoria, incluirInactivos: req.incluirInactivos, buscar: req.query.buscar === undefined ? '' : texto(req.query.buscar, 'buscar', 100, 0) }));
 }
 export async function obtener(req, res) { res.json(await servicio.obtener(idRuta(req.params.id), req.incluirInactivos)); }
 export async function crear(req, res) { res.status(201).json(await servicio.crear(validar(req.body, true), req.usuario)); }

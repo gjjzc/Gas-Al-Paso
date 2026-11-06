@@ -40,7 +40,9 @@ export function Login() {
             ? typeof destino === 'string' && /^\/repartidor(\/|$)/.test(destino)
               ? destino
               : '/repartidor/pedidos'
-            : '/mi-espacio',
+            : typeof destino === 'string' && /^\/admin(\/|$)/.test(destino)
+              ? destino
+              : '/admin/pedidos',
         { replace: true },
       );
     } catch (e) {

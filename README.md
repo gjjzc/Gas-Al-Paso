@@ -1,19 +1,19 @@
-# Gas al Paso — FASE 6: frontend REPARTIDOR
+# Gas al Paso — FASE 7: frontend ADMIN
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
 Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos, tarreo, cargas, cierre y cuadratura diaria.
-El frontend incluye el flujo CLIENTE y la jornada del REPARTIDOR: pedidos, entrega/cobro,
-venta de calle, ventas del día y cierre. Las pantallas de ADMIN quedan para FASE 7.
+El frontend incluye CLIENTE, jornada REPARTIDOR y administración completa: pedidos,
+llamadas, cargas, catálogo, usuarios, comunas de reparto, cuadratura y auditoría.
 
-## Actualizar desde FASE 5 (sin borrar datos)
+## Actualizar desde FASE 6 (sin borrar datos)
 
-Seguir [FASE 6: actualización y jornada desde el celular](docs/FASE-6.md).
-Conservar `.env`, JWT_SECRET y puertos; reconstruir API y frontend con
-`docker compose up -d --build`. Esta fase no agrega migraciones. **No usar `down -v`.**
+Seguir [FASE 7: actualización y ciclo completo del administrador](docs/FASE-7.md).
+Conservar `.env`, JWT_SECRET y puertos. Reconstruir API y frontend con
+`docker compose up -d --build`. No agrega migraciones. **No usar `down -v`.**
 Si falta FASE 4, aplicar primero [su migración](docs/FASE-4.md).
-El cliente entra en http://localhost:3000; el repartidor inicia sesión y accede a
-`/repartidor/pedidos`. La guía incluye cómo preparar una jornada con cuentas de prueba
-nuevas, sin depender de cuentas demo que ya tengan un cierre definitivo.
+Iniciar sesión en http://localhost:3000: ADMIN accede a `/admin/pedidos`,
+REPARTIDOR a `/repartidor/pedidos` y CLIENTE a su catálogo y pedidos.
+La guía incluye una demostración de toda la jornada usando cuentas nuevas.
 
 ## Descargar y abrir en VS Code
 

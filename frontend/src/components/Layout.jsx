@@ -58,7 +58,7 @@ export function Layout() {
                 to={
                   usuario.rol === 'REPARTIDOR'
                     ? '/repartidor/pedidos'
-                    : '/mi-espacio'
+                    : '/admin/pedidos'
                 }
               >
                 {rol[usuario.rol]}

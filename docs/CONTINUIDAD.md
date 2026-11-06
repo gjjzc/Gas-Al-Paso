@@ -4,23 +4,27 @@ Fecha de entrega: 6 de noviembre de 2026 (Chile).
 Repositorio: gjjzc/Gas-Al-Paso. Carpeta Windows habitual:
 C:\Users\gerar\Desktop\Gas-Al-Paso-fase0\Gas-Al-Paso-github.
 
-Fases 0–5 implementadas y verificadas: infraestructura, bases, API, ventas y control diario.
-FASE 6 incorpora la jornada completa del REPARTIDOR para celular. Rama del entorno:
-fase-6-frontend-repartidor. Entregable: Gas-Al-Paso-fase6.zip. No se ha confirmado su
-instalación local ni publicación remota; el usuario actualiza y sube desde PowerShell.
-Pendiente FASE 7: esperar su enunciado y revisión de esta fase antes de avanzar.
+Fases 0–7 implementadas en el entorno. La entrega actual es FASE 7, frontend ADMIN.
+Rama: fase-7-frontend-admin. ZIP: Gas-Al-Paso-fase7.zip. No se ha confirmado su
+instalación local ni publicación remota: el usuario copia y sube desde PowerShell.
+Validación de entrega: 19 pruebas de navegador, 98 de API base y 123 de control diario
+aprobadas. Demostración real: $46.000 cobrados, tres gases y un accesorio, cierre en cero.
+No iniciar fases adicionales sin nueva solicitud y revisión del usuario.
 
-Para retomar: leer docs/FASE-6.md y README.md. La fase 6 no cambia el esquema de las
-bases. Si falta fase 4, aplicar .scripts/aplicar-control.sh sin borrar volúmenes.
-El frontend tiene el flujo CLIENTE y el REPARTIDOR puede ver pedidos asignados, entregar
-con pago real, registrar tarreo con vista previa de importes, revisar sus ventas y
-cerrar caja/stock. ADMIN aún tiene navegación base; su frontend está pendiente.
-GET /api/cierre se agregó exclusivamente para la lectura propia del REPARTIDOR;
-GET /cuadratura y /cargas siguen siendo ADMIN. La guía incluye una preparación de
-jornada desde PowerShell y la ejecución completa desde el navegador del celular.
-Los reintentos de estado, tarreo y cierre conservan cuerpo y clave en sessionStorage.
-Las claves se generan con crypto.getRandomValues para funcionar también por HTTP
-con la IP local del PC (sin depender de randomUUID, que exige contexto seguro).
+Para retomar leer docs/FASE-7.md y README.md. No hay migraciones nuevas sobre FASE 6;
+reconstruir API y frontend. Si falta fase 4, aplicar .scripts/aplicar-control.sh sin
+borrar volúmenes. El frontend ahora cubre los tres roles: CLIENTE, REPARTIDOR y ADMIN.
+ADMIN tiene tablero/filtros, detalle y asignación, pedido por llamada, cargas acumuladas,
+CRUD de catálogo, gestión de usuarios/cobertura, cuadratura y auditoría.
+La guía describe una jornada completa con dos ventas, accesorio, descuento y cierre.
+
+GET /usuarios admite rol/activo/buscar con binds y GET /catalogo buscar antes de paginar.
+La cuadratura agrega productos_vendidos, incluidos accesorios. No se amplían permisos.
+GET /cierre sigue privado del REPARTIDOR; GET /cuadratura y administración siguen ADMIN.
+Cargas y pedidos telefónicos guardan clave/cuerpo para reintentos idempotentes;
+CRUD no reintenta altas automáticamente: comprobar listado si se pierde la respuesta.
+Las claves usan crypto.getRandomValues para funcionar también por HTTP con IP local.
+Los contadores del tablero indican la página visible, no totales globales inventados.
 
 Decisiones del usuario: cargas suman recargas; cuadratura por fecha de cobro;
 CLIENTE cancela solo RECIBIDO propio, ADMIN hasta EN_CAMINO; entregado es terminal.
