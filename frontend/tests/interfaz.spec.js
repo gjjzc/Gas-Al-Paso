@@ -216,9 +216,12 @@ test('carrito vencido impide confirmar y REPARTIDOR solo ve su navegación', asy
   await page.route('**/api/auth/me', (r) =>
     r.fulfill({ json: { ...cliente, rol: 'REPARTIDOR', id_cliente: null } }),
   );
+  await page.route('**/api/pedidos/asignados?**', (r) =>
+    r.fulfill({ json: [] }),
+  );
   await page.goto('/mi-espacio');
   await expect(
-    page.getByRole('heading', { name: 'Espacio del repartidor' }),
+    page.getByRole('heading', { name: 'Pedidos asignados' }),
   ).toBeVisible();
   await expect(
     page.getByRole('navigation').getByRole('link', { name: /Carrito/ }),

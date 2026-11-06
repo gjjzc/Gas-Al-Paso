@@ -4,18 +4,23 @@ Fecha de entrega: 6 de noviembre de 2026 (Chile).
 Repositorio: gjjzc/Gas-Al-Paso. Carpeta Windows habitual:
 C:\Users\gerar\Desktop\Gas-Al-Paso-fase0\Gas-Al-Paso-github.
 
-Fases 0–4 implementadas y verificadas: infraestructura, bases, API, ventas y control diario.
-FASE 5 incorpora sistema de diseño y flujo CLIENTE completo. Rama del entorno:
-fase-5-frontend-cliente. Entregable: Gas-Al-Paso-fase5.zip. No se ha confirmado su
+Fases 0–5 implementadas y verificadas: infraestructura, bases, API, ventas y control diario.
+FASE 6 incorpora la jornada completa del REPARTIDOR para celular. Rama del entorno:
+fase-6-frontend-repartidor. Entregable: Gas-Al-Paso-fase6.zip. No se ha confirmado su
 instalación local ni publicación remota; el usuario actualiza y sube desde PowerShell.
-Pendientes fases 6 y 7: esperar su enunciado y revisión de esta fase antes de avanzar.
+Pendiente FASE 7: esperar su enunciado y revisión de esta fase antes de avanzar.
 
-Para retomar: leer docs/FASE-5.md y README.md. La fase 5 no cambia el esquema de las
+Para retomar: leer docs/FASE-6.md y README.md. La fase 6 no cambia el esquema de las
 bases. Si falta fase 4, aplicar .scripts/aplicar-control.sh sin borrar volúmenes.
-El frontend ahora tiene catálogo, login/registro, carrito, confirmación, mis pedidos
-con historial, cancelación y consulta periódica de cambios. ADMIN y REPARTIDOR solo
-tienen acceso/navegación base; las pantallas operativas se harán después. La guía
-incluye PowerShell para asignar y entregar como repartidor y observar al cliente.
+El frontend tiene el flujo CLIENTE y el REPARTIDOR puede ver pedidos asignados, entregar
+con pago real, registrar tarreo con vista previa de importes, revisar sus ventas y
+cerrar caja/stock. ADMIN aún tiene navegación base; su frontend está pendiente.
+GET /api/cierre se agregó exclusivamente para la lectura propia del REPARTIDOR;
+GET /cuadratura y /cargas siguen siendo ADMIN. La guía incluye una preparación de
+jornada desde PowerShell y la ejecución completa desde el navegador del celular.
+Los reintentos de estado, tarreo y cierre conservan cuerpo y clave en sessionStorage.
+Las claves se generan con crypto.getRandomValues para funcionar también por HTTP
+con la IP local del PC (sin depender de randomUUID, que exige contexto seguro).
 
 Decisiones del usuario: cargas suman recargas; cuadratura por fecha de cobro;
 CLIENTE cancela solo RECIBIDO propio, ADMIN hasta EN_CAMINO; entregado es terminal.

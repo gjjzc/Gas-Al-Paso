@@ -30,3 +30,8 @@ export async function cuadratura(req, res) {
   res.json(await servicio.cuadratura({ fecha: fechaDia(req.query.fecha),
     id_empleado: req.query.id_empleado === undefined ? undefined : idRuta(req.query.id_empleado) }));
 }
+
+export async function propio(req, res) {
+  exigir(Object.keys(req.query).every(k => k === 'fecha'), 'Solo se admite el filtro fecha.');
+  res.json(await servicio.cierrePropio(req.usuario, fechaDia(req.query.fecha)));
+}

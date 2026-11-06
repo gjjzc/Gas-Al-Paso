@@ -204,3 +204,11 @@ export async function cuadratura(filtros) {
       cerrados: repartidores.filter(r => r.cierre).length, con_descuadre: repartidores.filter(r => r.descuadre).length } };
   });
 }
+
+// Vista privada para preparar o recuperar el cierre del repartidor autenticado.
+export async function cierrePropio(usuario, fecha) {
+  return conConexion(async c => {
+    await c.execute('SET TRANSACTION READ ONLY');
+    return reporte(c, usuario.id_empleado, fecha || await fechaActual(c));
+  });
+}

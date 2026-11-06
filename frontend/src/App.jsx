@@ -14,6 +14,11 @@ import { Catalogo } from './pages/Catalogo.jsx';
 import { Login, Registro } from './pages/Acceso.jsx';
 import { Carrito } from './pages/Carrito.jsx';
 import { Confirmar } from './pages/Confirmar.jsx';
+import { LayoutRepartidor } from './components/Repartidor.jsx';
+import { PedidosAsignados } from './pages/repartidor/PedidosAsignados.jsx';
+import { Tarreo } from './pages/repartidor/Tarreo.jsx';
+import { VentasDia } from './pages/repartidor/VentasDia.jsx';
+import { Cierre } from './pages/repartidor/Cierre.jsx';
 import { Pedidos, Pedido } from './pages/Pedidos.jsx';
 function Protegida({ roles }) {
   const auth = useAuth();
@@ -25,13 +30,18 @@ function Protegida({ roles }) {
     return (
       <Navigate to="/login" replace state={{ desde: location.pathname }} />
     );
-  if (roles && !roles.includes(auth.usuario.rol)) return <SinAcceso />;
+  if (roles && !roles.includes(auth.usuario.rol))
+    return <SinAcceso roles={roles} />;
   return <Outlet key={auth.usuario.id_usuario} />;
 }
-function SinAcceso() {
+function SinAcceso({ roles }) {
   return (
     <Tarjeta className="vacio">
-      <h1>Esta sección es para clientes</h1>
+      <h1>
+        {roles?.includes('REPARTIDOR')
+          ? 'Esta sección es para repartidores'
+          : 'Esta sección es para clientes'}
+      </h1>
       <p>Tu cuenta no tiene acceso a esta pantalla.</p>
       <EnlaceBoton to="/mi-espacio">Ir a mi espacio</EnlaceBoton>
     </Tarjeta>
@@ -39,6 +49,8 @@ function SinAcceso() {
 }
 function Espacio() {
   const { usuario } = useAuth();
+  if (usuario.rol === 'REPARTIDOR')
+    return <Navigate to="/repartidor/pedidos" replace />;
   return (
     <>
       <Encabezado
@@ -55,8 +67,8 @@ function Espacio() {
         <h2>Hola, {usuario.nombre}</h2>
         <p>Tu sesión está activa con el rol {usuario.rol}.</p>
         <p>
-          Las pantallas de administración y reparto se incorporarán en las
-          siguientes fases. Sus funciones actuales están disponibles en la API.
+          Las pantallas de administración se incorporarán en las siguientes
+          fases. Sus funciones actuales están disponibles en la API.
         </p>
         <EnlaceBoton to="/catalogo" variante="secundario">
           Ver catálogo
@@ -94,6 +106,15 @@ export function App() {
           <Route path="confirmar" element={<Confirmar />} />
           <Route path="pedidos" element={<Pedidos />} />
           <Route path="pedidos/:id" element={<Pedido />} />
+        </Route>
+        <Route element={<Protegida roles={['REPARTIDOR']} />}>
+          <Route path="repartidor" element={<LayoutRepartidor />}>
+            <Route index element={<Navigate to="pedidos" replace />} />
+            <Route path="pedidos" element={<PedidosAsignados />} />
+            <Route path="tarreo" element={<Tarreo />} />
+            <Route path="ventas" element={<VentasDia />} />
+            <Route path="cierre" element={<Cierre />} />
+          </Route>
         </Route>
         <Route element={<Protegida />}>
           <Route path="mi-espacio" element={<Espacio />} />

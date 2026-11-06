@@ -435,3 +435,24 @@ Authorization: Bearer {{tokenAdmin}}
 # - Mismo movimiento, entregar efectivo 26000 en vez de 27000 => diferencia -1000.
 # - Entregar 27000 pero devolver 1 en vez de 2 balones => diferencia de balones -1.
 # No se puede modificar un cierre ya guardado con otro POST.
+
+# ================================================================
+# FASE 6: vista privada del cierre del REPARTIDOR (antes o despues del POST).
+# No acepta id_empleado; siempre usa el empleado del JWT autenticado.
+# ================================================================
+
+### Preparar/consultar mi cierre de hoy: dinero esperado, cargas y pedidos pendientes
+GET {{base}}/cierre
+Authorization: Bearer {{tokenRepartidor}}
+
+### Consultar mi cierre de otra fecha; cambiar la fecha segun los datos locales
+GET {{base}}/cierre?fecha=2026-11-06
+Authorization: Bearer {{tokenRepartidor}}
+
+### Consulta ajena rechazada: HTTP 400, sin exponer otros empleados
+GET {{base}}/cierre?id_empleado=1
+Authorization: Bearer {{tokenRepartidor}}
+
+### El ADMIN sigue usando /cuadratura: GET /cierre requiere REPARTIDOR (HTTP 403)
+GET {{base}}/cierre
+Authorization: Bearer {{tokenAdmin}}

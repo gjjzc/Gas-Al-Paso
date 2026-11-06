@@ -54,7 +54,15 @@ export function Layout() {
               </>
             )}
             {usuario && usuario.rol !== 'CLIENTE' && (
-              <NavLink to="/mi-espacio">{rol[usuario.rol]}</NavLink>
+              <NavLink
+                to={
+                  usuario.rol === 'REPARTIDOR'
+                    ? '/repartidor/pedidos'
+                    : '/mi-espacio'
+                }
+              >
+                {rol[usuario.rol]}
+              </NavLink>
             )}
             {!usuario ? (
               <Link className="boton boton-secundario" to="/login">
