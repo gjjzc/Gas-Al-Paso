@@ -1,0 +1,84 @@
+name: gas-al-paso
+services:
+  oracle:
+    image: gvenzl/oracle-free:slim
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?Completa ORACLE_PASSWORD en .env}
+      APP_USER: ${APP_USER:-gas_app}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
+    ports:
+      - "1523:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./db/oracle:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-gas_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Completa MONGO_INITDB_ROOT_PASSWORD en .env}
+      MONGO_INITDB_DATABASE: gas_al_paso
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./db/mongo:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok === 1 ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    environment:
+      PORT: 4000
+      ORACLE_USER: ${APP_USER:-gas_app}
+      ORACLE_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
+      ORACLE_CONNECT_STRING: oracle:1521/FREEPDB1
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_USER: ${MONGO_INITDB_ROOT_USERNAME:-gas_admin}
+      MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Completa MONGO_INITDB_ROOT_PASSWORD en .env}
+      MONGO_DATABASE: gas_al_paso
+    ports:
+      - "4000:4000"
+    depends_on:
+      oracle:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "const r = await fetch('http://127.0.0.1:4000/api/health'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 12s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "const r = await fetch('http://127.0.0.1:3000'); process.exit(r.ok ? 0 : 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  oracle_data:
+  mongo_data:

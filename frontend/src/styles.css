@@ -1,0 +1,9 @@
+:root {
+  font-family: Inter, sans-serif;
+  color: #0b3d91;
+  background: #f7f9fc;
+  --color-principal: #0b3d91;
+  --color-acento: #ff6b1a;
+}
+body { margin: 0; }
+main { padding: 2rem; }
