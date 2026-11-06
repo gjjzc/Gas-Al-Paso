@@ -1,101 +1,200 @@
-# Gas al Paso — FASE 0
+# Gas al Paso — FASE 1: bases de datos
 
-Infraestructura de desarrollo: React + Vite, Node.js + Express, Oracle Free (thin) y MongoDB 7.
-Requisitos: Docker Engine con Compose v2, arquitectura amd64 y al menos 4 GB de RAM disponibles para Oracle.
+Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
+Node.js + Express, Oracle Free (driver thin) y MongoDB 7. Esta fase prepara el
+modelo y sus datos: el frontend todavía muestra únicamente **Gas al Paso** y
+la API implementa únicamente `GET /api/health`. Login y pantallas comerciales
+corresponden a fases posteriores.
 
 ## Descargar y abrir en VS Code
 
-1. Instalar y abrir Docker Desktop (debe indicar que el motor está ejecutándose).
-2. En GitHub, abrir `https://github.com/gjjzc/Gas-Al-Paso`, seleccionar **Code → Download ZIP** y descomprimir. Como alternativa, con Git instalado: `git clone https://github.com/gjjzc/Gas-Al-Paso.git`.
-3. En VS Code, elegir **Archivo → Abrir carpeta** y seleccionar la carpeta que contiene este README y `docker-compose.yml` (el ZIP puede llamarla `Gas-Al-Paso-main`).
-4. Abrir **Terminal → Nueva terminal**. Todos los comandos de Docker siguientes se ejecutan en esa carpeta, no dentro de `frontend` ni de `api`.
+1. Instalar y abrir Docker Desktop. Para trabajar solo con Docker no se necesita Node local.
+2. Descargar el proyecto, descomprimir y abrir en VS Code la carpeta que contiene `docker-compose.yml`.
+3. Abrir **Terminal → Nueva terminal** en esa carpeta (no dentro de `api` ni `frontend`).
+4. Copiar `.env.example` a `.env` y completar `ORACLE_PASSWORD`, `APP_USER_PASSWORD` y `MONGO_INITDB_ROOT_PASSWORD` con contraseñas locales fuertes y distintas. Mantener `APP_USER=gas_app` y `MONGO_INITDB_ROOT_USERNAME=gas_admin`, salvo que se quieran personalizar los usuarios. El nombre de usuario Oracle admite letras, números y guion bajo, empezando por letra; su contraseña no debe contener comillas dobles ni saltos de línea (limitación del arranque SQLPlus).
+5. Los puertos externos predeterminados son Oracle **1522** y Mongo **27017**. Si están ocupados en tu PC, cambiar en `.env`:
 
-## Levantar
-
-1. Copiar `.env.example` a `.env` (si aún no existe).
-2. Abrir `.env` y completar `ORACLE_PASSWORD`, `APP_USER_PASSWORD` y `MONGO_INITDB_ROOT_PASSWORD` con tres contraseñas locales fuertes, distintas y de al menos 16 caracteres (letras y números son suficientes). Mantener los nombres de usuario que trae el ejemplo. Nunca subir `.env` a Git. En VS Code puedes copiar y pegar el archivo `.env.example` desde el explorador y renombrar la copia a `.env`.
-3. Desde la raíz ejecutar:
-
-```sh
-docker compose up -d --build
-docker compose ps
-curl --fail http://localhost:4000/api/health
+```dotenv
+ORACLE_HOST_PORT=1523
+MONGO_HOST_PORT=27018
 ```
 
-Oracle puede tardar varios minutos en su primer inicio. Compose espera la salud de las bases antes de iniciar la API, y la salud de la API antes del frontend.
+No cambiar `oracle:1521/FREEPDB1` ni `mongo:27017` en la API: son direcciones internas.
+No escribir contraseñas reales en Compose ni subir `.env` a Git.
 
-Respuesta esperada (HTTP 200):
+## Inicializar desde cero
+
+Los scripts se ejecutan automáticamente **solo al crear volúmenes nuevos**.
+Para pasar del esquema vacío de FASE 0 a FASE 1 se necesita reinicializar las bases.
+**El siguiente `down -v` elimina todos los datos de este proyecto. Respaldar antes
+cualquier dato que se quiera conservar.** Ejecutar únicamente desde la carpeta correcta:
+
+```sh
+docker compose down -v
+docker compose up -d --build
+docker compose ps
+```
+
+En una instalación nueva basta con `docker compose up -d --build`. Oracle puede
+tardar varios minutos. Los cuatro servicios deben quedar `healthy`; Oracle no
+se marca listo hasta completar y verificar todas las migraciones.
+
+Abrir en el navegador:
+
+- `http://localhost:3000`: título Gas al Paso.
+- `http://localhost:4000/api/health`: HTTP 200 con `oracle` y `mongo` en `OK`.
 
 ```json
 {"estado":"OK","oracle":"OK","mongo":"OK","mensaje":"Oracle y MongoDB disponibles."}
 ```
 
-Si una consulta falla, health devuelve HTTP 503 e identifica la base con `ERROR`.
-Frontend en puerto 3000; API en 4000. Oracle: host 1522, servicio FREEPDB1; la API usa `oracle:1521/FREEPDB1`. MongoDB: host 27017, API usa `mongo:27017`, base `gas_al_paso` y autenticación en `admin`.
-La FASE 0 muestra únicamente el nombre del proyecto.
-
-## Operación
+Para ver errores de arranque:
 
 ```sh
-docker compose logs --tail=100 oracle api mongo
-docker compose down
-docker compose up -d
+docker compose logs --tail=150 oracle mongo api frontend
 ```
 
-`down` conserva los volúmenes `oracle_data` y `mongo_data`. **`docker compose down -v` elimina todos los datos** y permite repetir la inicialización. Cambiar contraseñas en `.env` no actualiza usuarios de volúmenes existentes: deben cambiarse también en la base.
+Si falla una migración en el primer inicio, el contenedor puede reiniciar con la
+base parcialmente creada. No confundir `DATABASE IS READY` del motor con la salud
+de esta aplicación: revisar los logs de la primera ejecución, corregir la causa y
+reinicializar los volúmenes de desarrollo. No ejecutar el legacy sobre datos reales.
 
-Los scripts de `db/oracle/` y `db/mongo/` se ejecutan solo con volúmenes nuevos. Consultar `db/oracle/README.md` para el SQL legacy adjunto, preservado sin ejecución automática. No se ha implementado todavía el modelo comercial.
+## Conectar SQL Developer
 
-Las imágenes instalan con `npm ci` usando los lockfiles. Para comprobar el build del frontend:
+Crear una conexión de tipo **Básico**:
+
+| Campo | Valor |
+| --- | --- |
+| Usuario | `gas_app` (o `APP_USER` de `.env`) |
+| Contraseña | El valor de `APP_USER_PASSWORD` de tu `.env` |
+| Rol | Predeterminado, **no SYSDBA** |
+| Host | `localhost` |
+| Puerto | `1522` o el valor de `ORACLE_HOST_PORT` si lo cambiaste |
+| Tipo | Nombre de servicio |
+| Servicio | `FREEPDB1` |
+
+Seleccionar **Probar** y luego **Conectar**. Consultas de comprobación:
+
+```sql
+SELECT * FROM Comuna ORDER BY id_comuna;
+SELECT email, rol, activo FROM Usuario ORDER BY id_usuario;
+SELECT id_producto, nombre, valor_unitario, stock, activo FROM Productos ORDER BY id_producto;
+SELECT id_venta, canal, estado_pago, subtotal, descuento, total_venta FROM Venta ORDER BY id_venta;
+SELECT * FROM V_Cuadratura_Dinero;
+SELECT * FROM V_Cuadratura_Stock;
+SELECT object_name, object_type FROM user_objects WHERE status = 'INVALID';
+```
+
+Resultados iniciales: una tienda, tres empleados, ocho comunas, tres clientes,
+seis usuarios, seis productos, tres ventas y ningún objeto inválido.
+
+## Conectar MongoDB Compass
+
+Crear una conexión con URI **sin contraseña incrustada**:
+
+```text
+mongodb://localhost:27017/?authSource=admin
+```
+
+Si cambiaste `MONGO_HOST_PORT`, usar ese puerto (por ejemplo `27018`). En las
+opciones de autenticación seleccionar **Username / Password**, usuario
+`gas_admin` (o `MONGO_INITDB_ROOT_USERNAME`), contraseña de
+`MONGO_INITDB_ROOT_PASSWORD` y base de autenticación **admin**.
+
+Conectar y abrir `gas_al_paso`: deben existir `catalogo` (6), `pedidos` (2),
+`carritos` (1 inicialmente, expira a los 30 minutos) y `eventos_auditoria` (1).
+En **Indexes** de `carritos` aparece `ttl_carrito`, con `expireAfterSeconds: 0`.
+El borrado TTL es asíncrono: puede tardar alrededor de un minuto después de expirar.
+
+## Cuentas ficticias de desarrollo
+
+**Estas credenciales son públicas, solo para desarrollo y nunca para producción.**
+Todas usan la contraseña ficticia **`GasPasoDemo2026!`**. En Oracle solo se guardan
+hashes bcrypt distintos, con costo 12. Son usuarios de la aplicación, no usuarios
+para SQL Developer ni Compass. El login se implementará en FASE 2.
+
+| Email | Rol | Vínculo |
+| --- | --- | --- |
+| `admin@demo.gasalpaso.test` | ADMIN | empleado 1 |
+| `camila@demo.gasalpaso.test` | REPARTIDOR | empleado 2 |
+| `diego@demo.gasalpaso.test` | REPARTIDOR | empleado 3 |
+| `ana@demo.gasalpaso.test` | CLIENTE | cliente 1 |
+| `bruno@demo.gasalpaso.test` | CLIENTE | cliente 2 |
+| `carla@demo.gasalpaso.test` | CLIENTE | cliente 3 |
+
+Camila cubre Santiago, Providencia, Ñuñoa y San Miguel. Diego cubre La Florida,
+Maipú, Puente Alto y La Cisterna. Nombres, teléfonos y direcciones de clientes son ficticios.
+
+## Modelo y scripts
+
+Ver [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
+`PkgVentas`, datos cruzados de ejemplo, cuadratura y reintentos de sincronización.
+
+Oracle monta `db/oracle/` en `/container-entrypoint-initdb.d`. Su lanzador
+`00-inicializar.sh` conecta como usuario de aplicación y ejecuta los SQL numerados
+01–06 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
+oficial los ejecute además como SYS. No omitirla al copiar el proyecto.
+El archivo legacy original permanece intacto en `db/oracle/legacy/` y se ejecuta
+explícitamente desde el script 01, incluidas sus pruebas y su rollback.
+Mongo monta `db/mongo/` en `/docker-entrypoint-initdb.d` y ejecuta `init.js`.
+Los scripts Oracle son **ordenados para instalación limpia**, no migraciones
+idempotentes sobre una base existente. La semilla Mongo usa upserts para no duplicar datos.
+
+## Ejecutar las pruebas
+
+La suite Oracle comprueba descuentos, stock, anulaciones, protección de ventas,
+cobro, auditoría y cuadratura. Hace rollback de sus cambios:
 
 ```sh
-docker compose exec frontend npm run build
+docker compose exec -T oracle bash /container-entrypoint-initdb.d/.tests/ejecutar.sh
 ```
 
-No se requieren secretos adicionales para esta fase. No se incluyen contraseñas en las imágenes ni en archivos versionados.
+La suite integrada comprueba referencias Oracle/Mongo, rollback de varias líneas,
+bloqueos concurrentes, índices y eliminación TTL real. Ejecutar con datos demo
+recién creados; puede tardar hasta 90 segundos por el monitor TTL.
 
-## Build en este entorno cloud
+**PowerShell (Windows):**
 
-El proxy requiere su CA pública durante la instalación npm. Sin desactivar TLS ni
-copiar certificados a las imágenes, usar el override opcional:
+```powershell
+Get-Content -Raw db/tests/verificar.mjs | docker compose exec -T api node --input-type=module
+```
+
+**Bash (Linux/macOS):**
+
+```sh
+docker compose exec -T api node --input-type=module < db/tests/verificar.mjs
+```
+
+Las secuencias Oracle avanzan durante las pruebas aunque se haga rollback; es normal
+que futuros IDs tengan saltos. Las pruebas no borran ni modifican persistentemente
+las ventas demo. Crean y limpian un carrito temporal con ID de cliente 999999;
+no utilizarlas sobre una base de producción.
+
+## Operación y edición del frontend
+
+`docker compose down` detiene el proyecto **sin borrar los datos**. Para volver,
+`docker compose up -d`. Las contraseñas nuevas de `.env` no modifican usuarios de
+volúmenes existentes: deben cambiarse también en la base o reinicializar datos demo.
+
+Después de editar React, reconstruir desde la raíz:
+
+```sh
+docker compose up -d --build frontend
+```
+
+Para recarga al guardar: con Node.js 24 LTS local, ejecutar `docker compose stop frontend`;
+en otra terminal entrar a `frontend`, ejecutar `npm ci` y `npm run dev`. Abrir
+`http://localhost:3000`. Para detener Vite presionar Ctrl+C y volver a Docker con
+`docker compose up -d frontend`. No se requiere Live Server.
+
+## Build en el entorno cloud
+
+Si la plataforma proporciona `CODEX_PROXY_CERT`, usar la CA pública del proxy
+como secreto temporal de BuildKit (no se copia a la imagen ni se desactiva TLS):
 
 ```sh
 docker compose -f docker-compose.yml -f docs/compose.cloud.yml build
 docker compose up -d --build
 ```
 
-`CODEX_PROXY_CERT` debe apuntar a la CA proporcionada por la plataforma. En un PC
-con acceso normal a Internet no se necesita el override.
-
-## Ver la página y probar las bases desde tu computador
-
-Cuando el arranque termine, abrir en el navegador:
-
-- `http://localhost:3000`: página que muestra únicamente **Gas al Paso** (alcance de FASE 0).
-- `http://localhost:4000/api/health`: JSON con `estado`, `oracle` y `mongo` en `OK`.
-
-No se necesita la extensión Live Server. Si algo no abre, ejecutar `docker compose ps`:
-los cuatro servicios deben estar `healthy`. Si están `starting`, esperar; si están
-`unhealthy` o `restarting`, consultar `docker compose logs --tail=100 api oracle mongo frontend`.
-En Windows, si Docker Desktop solicita WSL 2 o virtualización, completar primero su configuración.
-Los puertos 3000, 4000, 1522 y 27017 deben estar libres.
-
-## Editar React y ver los cambios al guardar
-
-Para recarga automática, instalar Node.js 24 LTS en el computador. Mantener la API
-y las bases en Docker, y ejecutar Vite desde VS Code:
-
-1. En la terminal de la raíz: `docker compose stop frontend`.
-2. En otra terminal:
-
-```sh
-cd frontend
-npm ci
-npm run dev
-```
-
-Abrir `http://localhost:3000` y editar `frontend/src/pages/Inicio.jsx`. Al guardar,
-Vite actualiza la página. Para terminar, presionar Ctrl+C en esa terminal.
-Para volver al frontend en Docker, desde la raíz ejecutar `docker compose up -d frontend`.
-Si prefieres usar solo Docker, después de editar ejecutar desde la raíz
-`docker compose up -d --build frontend` y recargar el navegador.
+En un computador con acceso normal a Internet no se necesita este override.

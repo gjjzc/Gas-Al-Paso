@@ -7,12 +7,12 @@ services:
       APP_USER: ${APP_USER:-gas_app}
       APP_USER_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
     ports:
-      - "1523:1521"
+      - "${ORACLE_HOST_PORT:-1522}:1521"
     volumes:
       - oracle_data:/opt/oracle/oradata
       - ./db/oracle:/container-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "healthcheck.sh"]
+      test: ["CMD-SHELL", "healthcheck.sh && test -f /opt/oracle/oradata/.gas-al-paso-fase1"]
       interval: 10s
       timeout: 5s
       retries: 60
@@ -26,12 +26,12 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Completa MONGO_INITDB_ROOT_PASSWORD en .env}
       MONGO_INITDB_DATABASE: gas_al_paso
     ports:
-      - "27018:27017"
+      - "${MONGO_HOST_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
       - ./db/mongo:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok === 1 ? 0 : 1)"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "const a = db.getSiblingDB('admin'); a.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD); const b = db.getSiblingDB('gas_al_paso'); quit(b.runCommand({ping:1}).ok === 1 && b.getCollectionNames().length === 4 ? 0 : 1)"]
       interval: 10s
       timeout: 5s
       retries: 30
