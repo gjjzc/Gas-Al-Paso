@@ -24,7 +24,14 @@ export function validarAlta(cuerpo, registro = false) {
   }
   return datos;
 }
-export async function listar(req, res) { res.json(await servicio.listarUsuarios(paginacion(req.query))); }
+export async function listar(req, res) {
+  const { rol, activo } = req.query;
+  exigir(rol === undefined || roles.includes(rol), 'Rol invalido.');
+  exigir(activo === undefined || ['true','false'].includes(activo), 'activo debe ser true o false.');
+  res.json(await servicio.listarUsuarios({ ...paginacion(req.query), rol,
+    activo: activo === undefined ? undefined : activo === 'true',
+    buscar: req.query.buscar === undefined ? '' : texto(req.query.buscar, 'buscar', 100, 0) }));
+}
 export async function crear(req, res) { res.status(201).json(await servicio.crearUsuario(validarAlta(req.body))); }
 export async function editar(req, res) {
   campos(req.body, ['email', 'password', 'nombre', 'rol', 'activo', 'telefono', 'direccion_principal', 'id_comuna']);

@@ -18,9 +18,11 @@ export async function buscarLogin(email) {
   return conConexion(async c => (await consultar(c,
     'SELECT id_usuario,email,password_hash,rol,activo,token_version FROM Usuario WHERE email=:email', { email }))[0]);
 }
-export async function listarUsuarios({ limite, offset }) {
-  return conConexion(async c => (await consultar(c, `${seleccion} ORDER BY u.id_usuario OFFSET :offset ROWS FETCH NEXT :limite ROWS ONLY`,
-    { limite, offset })).map(usuarioPublico));
+export async function listarUsuarios({ limite, offset, rol, activo, buscar = '' }) {
+  return conConexion(async c => (await consultar(c, `${seleccion} WHERE (:rol IS NULL OR u.rol=:rol) AND (:activo IS NULL OR u.activo=:activo)
+    AND (:buscar IS NULL OR INSTR(LOWER(COALESCE(e.nombre,c.nombre)||' '||u.email),:buscar)>0)
+    ORDER BY u.id_usuario OFFSET :offset ROWS FETCH NEXT :limite ROWS ONLY`,
+    { limite, offset, rol: rol || null, activo: activo === undefined ? null : Number(activo), buscar: buscar.toLowerCase() || null })).map(usuarioPublico));
 }
 async function cambiarComunas(c, empleado, comunas) {
   await c.execute('DELETE FROM Repartidor_Comuna WHERE id_empleado=:id', { id: empleado });

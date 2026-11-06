@@ -456,3 +456,19 @@ Authorization: Bearer {{tokenRepartidor}}
 ### El ADMIN sigue usando /cuadratura: GET /cierre requiere REPARTIDOR (HTTP 403)
 GET {{base}}/cierre
 Authorization: Bearer {{tokenAdmin}}
+
+# ================================================================
+# FASE 7: busquedas antes de paginar para los selectores del ADMIN.
+# ================================================================
+
+### Clientes activos por nombre/email
+GET {{base}}/usuarios?rol=CLIENTE&activo=true&buscar=ana&limite=15&offset=0
+Authorization: Bearer {{tokenAdmin}}
+
+### Buscar productos por nombre/descripcion e incluir inactivos (ADMIN)
+GET {{base}}/catalogo?incluir_inactivos=true&buscar=gas&limite=15&offset=0
+Authorization: Bearer {{tokenAdmin}}
+
+### Cuadratura incluye productos_vendidos: gases y accesorios por trabajador
+GET {{base}}/cuadratura
+Authorization: Bearer {{tokenAdmin}}

@@ -16,12 +16,12 @@ async function buscarOracle(c, id, bloquear = false) {
   exigir(producto, 'Producto no encontrado.', 404);
   return producto;
 }
-export async function listar({ limite, offset, categoria, incluirInactivos }) {
+export async function listar({ limite, offset, categoria, incluirInactivos, buscar = '' }) {
   const filtro = incluirInactivos ? {} : { activo: true };
   if (categoria) filtro.categoria = categoria;
   // Filtrar por el estado real de Oracle antes de paginar evita paginas incompletas.
   const oracle = await conConexion(c => consultar(c, `SELECT ${columnas} FROM Productos ${incluirInactivos ? '' : 'WHERE activo=1'}`));
-  const porId = new Map(oracle.map(p => [p.id_producto, p]));
+  const porId = new Map(oracle.filter(p => `${p.nombre} ${p.descripcion}`.toLowerCase().includes(buscar.toLowerCase())).map(p => [p.id_producto, p]));
   filtro.id_producto = { $in: [...porId.keys()] };
   await conectarMongo();
   const metadata = await mongoDb.collection('catalogo').find(filtro).sort({ id_producto: 1 }).skip(offset).limit(limite).toArray();

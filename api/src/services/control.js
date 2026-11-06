@@ -58,6 +58,14 @@ async function reporte(c, empleado, fecha) {
     esperado_efectivo,esperado_transferencia,entregado_efectivo,entregado_transferencia
     FROM Cierre_caja WHERE id_empleado=:id AND fecha=TO_DATE(:fecha,'YYYY-MM-DD')`, { id: empleado, fecha });
   const ventas = await dineroEsperado(c, empleado, fecha);
+  // Incluye accesorios, ademas de los balones del control fisico.
+  const productosVendidos = await consultar(c, `SELECT d.id_producto,p.nombre,SUM(d.cantidad) cantidad,
+    SUM(d.subtotal) subtotal,SUM(d.descuento) descuento,SUM(d.total_venta) total
+    FROM Venta v JOIN Detalle_venta d ON d.id_venta=v.id_venta JOIN Productos p ON p.id_producto=d.id_producto
+    WHERE v.id_empleado=:id AND v.estado_pago='COBRADA' AND v.estado_registro='CONFIRMADA'
+      AND NVL(v.fecha_cobro,v.fecha_venta)>=TO_DATE(:fecha,'YYYY-MM-DD')
+      AND NVL(v.fecha_cobro,v.fecha_venta)<TO_DATE(:fecha,'YYYY-MM-DD')+1
+    GROUP BY d.id_producto,p.nombre ORDER BY d.id_producto`, { id: empleado, fecha });
   const base = await balonesDia(c, empleado, fecha, cierre?.id_cierre);
   const efectivo = metodo(ventas.efectivo, cierre ? cierre.entregado_efectivo : null);
   const transferencia = metodo(ventas.transferencia, cierre ? cierre.entregado_transferencia : null);
@@ -76,7 +84,7 @@ async function reporte(c, empleado, fecha) {
   const descuadre = cierre ? Boolean(descuadreDinero || balones.some(b => b.descuadre) || cambiado) : null;
   return { fecha, id_empleado: empleado, nombre: persona.nombre, activo: persona.activo === 1,
     estado: cierre ? (descuadre ? 'DESCUADRE' : 'CUADRADO') : 'ABIERTO', descuadre,
-    dinero: { efectivo, transferencia, total, descuadre: descuadreDinero }, balones, ventas,
+    dinero: { efectivo, transferencia, total, descuadre: descuadreDinero }, balones, ventas, productos_vendidos: productosVendidos,
     pedidos_sin_resolver: await pendientes(c, empleado),
     cierre: cierre ? { ...cierre, desactualizado: Boolean(cambiado) } : null };
 }
