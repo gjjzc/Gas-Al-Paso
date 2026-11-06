@@ -1,17 +1,18 @@
 import oracledb from 'oracledb';
-import { mongoDb } from '../config/databases.js';
+import { ObjectId } from 'mongodb';
+import { mongoDb, conectarMongo } from '../config/databases.js';
 import { transaccion, consultar, salidaNumero } from './oracle.js';
 
-export async function encolar(conexion, tipo, datos) {
-  const r = await conexion.execute(`INSERT INTO Pendiente_Mongo(tipo,payload)
-    VALUES(:tipo,:payload) RETURNING id_evento INTO :id`, {
-    tipo, payload: { val: JSON.stringify(datos), type: oracledb.CLOB }, id: salidaNumero(),
+export async function encolar(conexion, tipo, datos, idVenta = null) {
+  const r = await conexion.execute(`INSERT INTO Pendiente_Mongo(tipo,payload,id_venta)
+    VALUES(:tipo,:payload,:venta) RETURNING id_evento INTO :id`, {
+    tipo, payload: { val: JSON.stringify(datos), type: oracledb.CLOB }, venta: idVenta, id: salidaNumero(),
   });
   return r.outBinds.id[0];
 }
 export async function auditar(conexion, tipo, usuario, detalle) {
   return encolar(conexion, 'AUDITORIA', { tipo, fecha: new Date().toISOString(),
-    usuario: { id: usuario.id_usuario, rol: usuario.rol }, detalle });
+    usuario: { id: usuario.id_usuario, rol: usuario.rol }, detalle }, detalle.id_venta || null);
 }
 let trabajoActual;
 async function vaciar() {
@@ -23,12 +24,29 @@ async function vaciar() {
         AND estado='PENDIENTE' FOR UPDATE NOWAIT`, {}, { fetchInfo: { PAYLOAD: { type: oracledb.STRING } } });
       if (!evento) return false;
       try {
+        await conectarMongo();
         const datos = JSON.parse(evento.payload);
         if (evento.tipo === 'CATALOGO_CREAR') {
           await mongoDb.collection('catalogo').updateOne({ id_producto: datos.id_producto }, { $set: datos }, { upsert: true });
         } else if (evento.tipo === 'CATALOGO_EDITAR') {
           const r = await mongoDb.collection('catalogo').updateOne({ id_producto: datos.id_producto }, { $set: datos.cambios });
           if (!r.matchedCount && !datos.permitir_ausente) throw new Error('CatalogoNoEncontrado');
+        } else if (evento.tipo === 'PEDIDO_GUARDAR') {
+          const { _id, ...pedido } = datos;
+          pedido.creado_en = new Date(pedido.creado_en);
+          pedido.historial_estados = pedido.historial_estados.map(cambio => ({ ...cambio, fecha: new Date(cambio.fecha) }));
+          await mongoDb.collection('pedidos').updateOne({ _id: new ObjectId(_id) }, { $set: pedido }, { upsert: true });
+        } else if (evento.tipo === 'PEDIDO_ELIMINAR') {
+          await mongoDb.collection('pedidos').deleteOne({ _id: new ObjectId(datos._id) });
+        } else if (evento.tipo === 'CARRITO_LIMPIAR') {
+          const filtro = { id_cliente: datos.id_cliente };
+          if (datos.version) filtro.version = datos.version;
+          else {
+            filtro.version = { $exists: false };
+            filtro.actualizado_en = new Date(datos.actualizado_en);
+          }
+          // Un carrito editado despues del checkout tiene otra version: se conserva.
+          await mongoDb.collection('carritos').deleteOne(filtro);
         } else if (evento.tipo === 'AUDITORIA') {
           await mongoDb.collection('eventos_auditoria').updateOne({ _id: `oracle-${evento.id_evento}` },
             { $setOnInsert: { ...datos, fecha: new Date(datos.fecha) } }, { upsert: true });

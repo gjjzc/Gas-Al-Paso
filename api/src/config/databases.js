@@ -29,3 +29,12 @@ export const mongoClient = new MongoClient(
   },
 );
 export const mongoDb = mongoClient.db(process.env.MONGO_DATABASE);
+
+let intentoMongo;
+export async function conectarMongo() {
+  // Un fallo en la conexion inicial puede cerrar la topologia del driver.
+  // connect() explicito la recrea; compartir la promesa evita intentos superpuestos.
+  if (!intentoMongo) intentoMongo = mongoClient.connect().finally(() => { intentoMongo = undefined; });
+  await intentoMongo;
+  return mongoDb;
+}

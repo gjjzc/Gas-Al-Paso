@@ -1,4 +1,4 @@
-import { mongoDb } from '../config/databases.js';
+import { mongoDb, conectarMongo } from '../config/databases.js';
 import { conConexion, consultar, transaccion, salidaNumero } from './oracle.js';
 import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
 import { exigir } from '../middlewares/validar.js';
@@ -23,11 +23,13 @@ export async function listar({ limite, offset, categoria, incluirInactivos }) {
   const oracle = await conConexion(c => consultar(c, `SELECT ${columnas} FROM Productos ${incluirInactivos ? '' : 'WHERE activo=1'}`));
   const porId = new Map(oracle.map(p => [p.id_producto, p]));
   filtro.id_producto = { $in: [...porId.keys()] };
+  await conectarMongo();
   const metadata = await mongoDb.collection('catalogo').find(filtro).sort({ id_producto: 1 }).skip(offset).limit(limite).toArray();
   return metadata.map(m => publicar(porId.get(m.id_producto), m));
 }
 export async function obtener(id, incluirInactivos = false) {
   const oracle = await conConexion(c => buscarOracle(c, id));
+  await conectarMongo();
   const metadata = await mongoDb.collection('catalogo').findOne({ id_producto: id });
   exigir(metadata && (incluirInactivos || (oracle.activo === 1 && metadata.activo)), 'Producto no encontrado.', 404);
   return publicar(oracle, metadata);
@@ -53,6 +55,7 @@ export async function crear(datos, usuario) {
 export async function editar(id, datos, usuario, soloOracle = false) {
   let metadata;
   if (!soloOracle) {
+    await conectarMongo();
     metadata = await mongoDb.collection('catalogo').findOne({ id_producto: id });
     exigir(metadata, 'Producto de catalogo no encontrado.', 404);
   }
