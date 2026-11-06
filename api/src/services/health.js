@@ -1,4 +1,4 @@
-import { oraclePool, mongoDb } from '../config/databases.js';
+import { oraclePool, conectarMongo } from '../config/databases.js';
 
 async function verificarOracle() {
   let conexion;
@@ -15,7 +15,7 @@ export async function verificarBases() {
   // Una caída no impide comprobar la otra base.
   const resultados = await Promise.allSettled([
     verificarOracle(),
-    mongoDb.command({ ping: 1 }),
+    conectarMongo().then(db => db.command({ ping: 1 })),
   ]);
   const [oracle, mongo] = resultados.map((resultado) =>
     resultado.status === 'fulfilled' ? 'OK' : 'ERROR',

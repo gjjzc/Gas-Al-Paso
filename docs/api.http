@@ -192,3 +192,162 @@ Authorization: Bearer {{tokenAdmin}}
 Content-Type: application/json
 
 {"stock":-1}
+
+# ================================================================
+# FASE 3: carrito, pedidos y ventas. Usar claves nuevas para cada venta
+# NUEVA; repetir la misma clave/cuerpo solo para reintentar la misma venta.
+# Primero ejecutar loginAdmin, loginCliente y loginRepartidor de arriba.
+# ================================================================
+@pedidoWeb = {{crearPedidoWeb.response.body.$._id}}
+@pedidoLlamada = {{crearPedidoLlamada.response.body.$._id}}
+@claveWeb = f3-web-demo-001
+@claveTelefono = f3-telefono-demo-001
+@claveTarreo = f3-tarreo-demo-001
+
+### Leer carrito propio (CLIENTE). GET no renueva el TTL.
+GET {{base}}/carrito
+Authorization: Bearer {{tokenCliente}}
+
+### Vaciar carrito propio antes de la demostracion
+DELETE {{base}}/carrito
+Authorization: Bearer {{tokenCliente}}
+
+### Agregar 2 balones de 11 kg: $30.000, descuento $3.000 si mantienen el precio demo
+POST {{base}}/carrito/items
+Authorization: Bearer {{tokenCliente}}
+Content-Type: application/json
+
+{"id_producto":2,"cantidad":2}
+
+### Cambiar cantidad (sustituye, no suma). Cada cambio renueva 30 minutos.
+PATCH {{base}}/carrito/items/2
+Authorization: Bearer {{tokenCliente}}
+Content-Type: application/json
+
+{"cantidad":2}
+
+### Quitar una linea; volver a agregarla antes de confirmar si ejecutas este ejemplo
+DELETE {{base}}/carrito/items/2
+Authorization: Bearer {{tokenCliente}}
+
+### Confirmar WEB: ejecutar despues de agregar los productos al carrito
+# @name crearPedidoWeb
+POST {{base}}/pedidos
+Authorization: Bearer {{tokenCliente}}
+Idempotency-Key: {{claveWeb}}
+Content-Type: application/json
+
+{
+  "direccion_entrega":{"calle":"Calle Ejemplo","numero":"100","id_comuna":1,"referencia":"Direccion ficticia"},
+  "metodo_cobro":"EFECTIVO"
+}
+
+### Reintento del mismo checkout: HTTP 200, mismo id_venta, sin nuevo descuento de stock
+POST {{base}}/pedidos
+Authorization: Bearer {{tokenCliente}}
+Idempotency-Key: {{claveWeb}}
+Content-Type: application/json
+
+{
+  "direccion_entrega":{"calle":"Calle Ejemplo","numero":"100","id_comuna":1,"referencia":"Direccion ficticia"},
+  "metodo_cobro":"EFECTIVO"
+}
+
+### Pedidos del CLIENTE autenticado
+GET {{base}}/pedidos/mios
+Authorization: Bearer {{tokenCliente}}
+
+### Pedidos ADMIN, filtros opcionales estado, fecha AAAA-MM-DD y comuna (nombre o ID)
+GET {{base}}/pedidos?estado=RECIBIDO&comuna=1&limite=50&offset=0
+Authorization: Bearer {{tokenAdmin}}
+
+### Detalle: ADMIN, cliente propietario o repartidor asignado
+GET {{base}}/pedidos/{{pedidoWeb}}
+Authorization: Bearer {{tokenCliente}}
+
+### Sugerencias: primero quienes cubren la comuna de entrega
+GET {{base}}/repartidores?comuna=1
+Authorization: Bearer {{tokenAdmin}}
+
+### ADMIN asigna a Camila (id_empleado=2 de la semilla)
+PATCH {{base}}/pedidos/{{pedidoWeb}}/asignar
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"id_empleado":2}
+
+### Pedidos asignados al REPARTIDOR autenticado
+GET {{base}}/pedidos/asignados
+Authorization: Bearer {{tokenRepartidor}}
+
+### Repartidor asignado o ADMIN: ASIGNADO -> EN_CAMINO
+PATCH {{base}}/pedidos/{{pedidoWeb}}/estado
+Authorization: Bearer {{tokenRepartidor}}
+Content-Type: application/json
+
+{"estado":"EN_CAMINO"}
+
+### EN_CAMINO -> ENTREGADO exige metodo real de pago y cobra la venta
+PATCH {{base}}/pedidos/{{pedidoWeb}}/estado
+Authorization: Bearer {{tokenRepartidor}}
+Content-Type: application/json
+
+{"estado":"ENTREGADO","metodo_pago":"EFECTIVO"}
+
+### ADMIN crea pedido por llamada para un cliente existente; no usa su carrito
+# @name crearPedidoLlamada
+POST {{base}}/pedidos/telefonico
+Authorization: Bearer {{tokenAdmin}}
+Idempotency-Key: {{claveTelefono}}
+Content-Type: application/json
+
+{
+  "id_cliente":1,
+  "direccion_entrega":{"calle":"Calle Ejemplo","numero":"100","id_comuna":1,"referencia":"Pedido telefonico demo"},
+  "metodo_cobro":"TRANSFERENCIA",
+  "items":[{"id_producto":3,"cantidad":1},{"id_producto":5,"cantidad":1}]
+}
+
+### CLIENTE cancela su pedido telefonico mientras sigue RECIBIDO
+PATCH {{base}}/pedidos/{{pedidoLlamada}}/cancelar
+Authorization: Bearer {{tokenCliente}}
+
+### ADMIN puede cancelar hasta EN_CAMINO; repetir CANCELADO no devuelve doble stock
+PATCH {{base}}/pedidos/{{pedidoLlamada}}/cancelar
+Authorization: Bearer {{tokenAdmin}}
+
+### ADMIN elimina documento Mongo solo si esta CANCELADO; conserva Oracle y auditoria
+DELETE {{base}}/pedidos/{{pedidoLlamada}}
+Authorization: Bearer {{tokenAdmin}}
+
+### TARREO: REPARTIDOR, cobrada desde el alta, sin cliente ni direccion de pedido
+POST {{base}}/ventas/calle
+Authorization: Bearer {{tokenRepartidor}}
+Idempotency-Key: {{claveTarreo}}
+Content-Type: application/json
+
+{"items":[{"id_producto":2,"cantidad":1},{"id_producto":3,"cantidad":1}],"metodo_pago":"EFECTIVO"}
+
+### Ventas del dia del repartidor y resumen de COBRADAS separado por metodo
+GET {{base}}/ventas/dia
+Authorization: Bearer {{tokenRepartidor}}
+
+### ADMIN filtra por empleado, canal y estado de pago; fecha es opcional AAAA-MM-DD
+GET {{base}}/ventas/dia?id_empleado=2&canal=TARREO&estado_pago=COBRADA
+Authorization: Bearer {{tokenAdmin}}
+
+### Comprobantes Mongo del tarreo y sus totales (ADMIN)
+GET {{base}}/auditoria?tipo=VENTA_TARREO
+Authorization: Bearer {{tokenAdmin}}
+
+### Stock insuficiente: HTTP 409 y evento VENTA_RECHAZADA_STOCK
+POST {{base}}/ventas/calle
+Authorization: Bearer {{tokenRepartidor}}
+Idempotency-Key: f3-sin-stock-demo-001
+Content-Type: application/json
+
+{"items":[{"id_producto":4,"cantidad":9999}],"metodo_pago":"EFECTIVO"}
+
+### Consultar rechazos por stock
+GET {{base}}/auditoria?tipo=VENTA_RECHAZADA_STOCK
+Authorization: Bearer {{tokenAdmin}}

@@ -5,6 +5,8 @@ import * as auth from '../controllers/auth.js';
 import * as usuarios from '../controllers/usuarios.js';
 import * as catalogo from '../controllers/catalogo.js';
 import * as auditoria from '../controllers/auditoria.js';
+import * as carrito from '../controllers/carrito.js';
+import * as ventas from '../controllers/ventas.js';
 
 export const apiRouter = Router();
 apiRouter.post('/auth/login', auth.login);
@@ -32,3 +34,23 @@ apiRouter.get('/repartidores', autenticar, permitir('ADMIN'), usuarios.repartido
 apiRouter.put('/repartidores/:id/comunas', autenticar, permitir('ADMIN'), usuarios.cobertura);
 apiRouter.get('/auditoria', autenticar, permitir('ADMIN'), auditoria.listar);
 apiRouter.post('/sincronizacion/reintentar', autenticar, permitir('ADMIN'), auditoria.reintentar);
+
+// Carrito privado por cliente. El TTL se renueva solo al modificarlo.
+apiRouter.get('/carrito', autenticar, permitir('CLIENTE'), carrito.obtener);
+apiRouter.post('/carrito/items', autenticar, permitir('CLIENTE'), carrito.agregar);
+apiRouter.patch('/carrito/items/:idProducto', autenticar, permitir('CLIENTE'), carrito.cambiar);
+apiRouter.delete('/carrito/items/:idProducto', autenticar, permitir('CLIENTE'), carrito.quitar);
+apiRouter.delete('/carrito', autenticar, permitir('CLIENTE'), carrito.vaciar);
+apiRouter.post('/pedidos', autenticar, permitir('CLIENTE'), ventas.confirmar);
+apiRouter.post('/pedidos/telefonico', autenticar, permitir('ADMIN'), ventas.telefonico);
+// Rutas fijas antes de /pedidos/:id para evitar interpretar 'mios' como ObjectId.
+apiRouter.get('/pedidos/mios', autenticar, permitir('CLIENTE'), ventas.listarPedidos);
+apiRouter.get('/pedidos/asignados', autenticar, permitir('REPARTIDOR'), ventas.listarPedidos);
+apiRouter.get('/pedidos', autenticar, permitir('ADMIN'), ventas.listarPedidos);
+apiRouter.get('/pedidos/:id', autenticar, ventas.obtenerPedido);
+apiRouter.patch('/pedidos/:id/asignar', autenticar, permitir('ADMIN'), ventas.asignar);
+apiRouter.patch('/pedidos/:id/estado', autenticar, permitir('ADMIN', 'REPARTIDOR'), ventas.estado);
+apiRouter.patch('/pedidos/:id/cancelar', autenticar, permitir('ADMIN', 'CLIENTE'), ventas.cancelar);
+apiRouter.delete('/pedidos/:id', autenticar, permitir('ADMIN'), ventas.eliminar);
+apiRouter.post('/ventas/calle', autenticar, permitir('REPARTIDOR'), ventas.calle);
+apiRouter.get('/ventas/dia', autenticar, permitir('ADMIN', 'REPARTIDOR'), ventas.dia);

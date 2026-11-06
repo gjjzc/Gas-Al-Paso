@@ -1,15 +1,16 @@
-# Gas al Paso — FASE 2: API base
+# Gas al Paso — FASE 3: flujo de ventas
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
-Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API ya implementa login, registro, JWT/roles, catálogo y administración.
+Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos y tarreo.
 El frontend todavía muestra únicamente **Gas al Paso**: sus pantallas comerciales
 corresponden a una fase posterior.
 
-## Actualizar desde FASE 1 (sin borrar datos)
+## Actualizar desde FASE 2 (sin borrar datos)
 
-Seguir [las instrucciones de FASE 2](docs/FASE-2.md#actualizar-desde-fase-1-sin-perder-datos):
-agregar JWT_SECRET a `.env`, aplicar **solo** `.scripts/aplicar-api.sh` y reconstruir
-la API. **No ejecutar `down -v` ni el legacy para esta actualización.**
+Seguir [las instrucciones de FASE 3](docs/FASE-3.md#actualizar-desde-fase-2-sin-borrar-datos):
+conservar `.env` y JWT_SECRET, aplicar **solo** `.scripts/aplicar-ventas.sh` y reconstruir
+la API. **No ejecutar `down -v` ni el legacy para esta actualización.** Si todavía
+se usa FASE 1, agregar JWT_SECRET como explica FASE 2; el actualizador incluye 07 y 08.
 Los ejemplos completos de cada endpoint están en [docs/api.http](docs/api.http).
 
 ## Descargar y abrir en VS Code
@@ -134,12 +135,12 @@ Maipú, Puente Alto y La Cisterna. Nombres, teléfonos y direcciones de clientes
 
 ## Modelo y scripts
 
-Ver [documentación de FASE 2](docs/FASE-2.md) para endpoints, JWT y actualización aditiva; y [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
+Ver [documentación de FASE 3](docs/FASE-3.md) para carrito, ventas y actualización aditiva; [FASE 2](docs/FASE-2.md) para JWT y administración; y [documentación de FASE 1](docs/FASE-1.md) para el orden de scripts, contratos de
 `PkgVentas`, datos cruzados de ejemplo, cuadratura y reintentos de sincronización.
 
 Oracle monta `db/oracle/` en `/container-entrypoint-initdb.d`. Su lanzador
 `00-inicializar.sh` conecta como usuario de aplicación y ejecuta los SQL numerados
-01–07 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
+01–08 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
 oficial los ejecute además como SYS. No omitirla al copiar el proyecto.
 El archivo legacy original permanece intacto en `db/oracle/legacy/` y se ejecuta
 explícitamente desde el script 01, incluidas sus pruebas y su rollback.
@@ -149,6 +150,14 @@ idempotentes sobre una base existente. La semilla Mongo usa upserts para no dupl
 
 ## Ejecutar las pruebas
 
+Para el flujo de ventas de FASE 3 (solo bases demo, crea ventas y auditoría de prueba):
+
+```powershell
+Get-Content -Raw api/tests/ventas.mjs | docker compose exec -T api node --input-type=module
+```
+
+Ver [contratos, permisos, reintentos y ejemplos de FASE 3](docs/FASE-3.md).
+
 Para la API de FASE 2, ver [la suite funcional](docs/FASE-2.md#pruebas-funcionales).
 Desde PowerShell:
 
@@ -157,7 +166,7 @@ Get-Content -Raw api/tests/api.mjs | docker compose exec -T api node --input-typ
 ```
 
 Las pruebas relacionales/integradas de FASE 1 siguientes requieren datos recién
-sembrados y deben ejecutarse **antes** de la suite API, que crea usuarios y productos demo.
+sembrados y deben ejecutarse **antes** de las suites API y ventas, que crean usuarios, productos y ventas demo.
 
 La suite Oracle comprueba descuentos, stock, anulaciones, protección de ventas,
 cobro, auditoría y cuadratura. Hace rollback de sus cambios:

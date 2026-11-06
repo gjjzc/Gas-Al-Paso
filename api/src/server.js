@@ -8,9 +8,10 @@ await conConexion(async conexion => {
     await conexion.execute('SELECT token_version FROM Usuario WHERE 1=0');
     const [r] = await consultar(conexion, "SELECT COUNT(*) cantidad FROM user_sequences WHERE sequence_name IN ('SEQ_PRODUCTO','SEQ_EMPLEADO')");
     if (r.cantidad !== 2) throw new Error('Esquema incompleto');
+    await conexion.execute('SELECT clave,carrito_version FROM Solicitud_Venta WHERE 1=0');
   } catch (error) {
-    if (error.errorNum === 904 || error.message === 'Esquema incompleto') {
-      throw new Error('Falta la migracion 07-api.sql. Ejecuta .scripts/aplicar-api.sh en el contenedor Oracle.');
+    if ([904, 942].includes(error.errorNum) || error.message === 'Esquema incompleto') {
+      throw new Error('Faltan migraciones de API. Ejecuta .scripts/aplicar-ventas.sh en el contenedor Oracle (07 y 08).');
     }
     throw error;
   }
