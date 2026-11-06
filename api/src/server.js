@@ -9,9 +9,11 @@ await conConexion(async conexion => {
     const [r] = await consultar(conexion, "SELECT COUNT(*) cantidad FROM user_sequences WHERE sequence_name IN ('SEQ_PRODUCTO','SEQ_EMPLEADO')");
     if (r.cantidad !== 2) throw new Error('Esquema incompleto');
     await conexion.execute('SELECT clave,carrito_version FROM Solicitud_Venta WHERE 1=0');
+    await conexion.execute('SELECT fecha_cobro FROM Venta WHERE 1=0');
+    await conexion.execute('SELECT clave FROM Solicitud_Control WHERE 1=0');
   } catch (error) {
     if ([904, 942].includes(error.errorNum) || error.message === 'Esquema incompleto') {
-      throw new Error('Faltan migraciones de API. Ejecuta .scripts/aplicar-ventas.sh en el contenedor Oracle (07 y 08).');
+      throw new Error('Faltan migraciones de API. Ejecuta .scripts/aplicar-control.sh en el contenedor Oracle (07 a 09).');
     }
     throw error;
   }

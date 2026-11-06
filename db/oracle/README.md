@@ -1,7 +1,7 @@
-# Inicialización Oracle — FASE 3
+# Inicialización Oracle — FASE 4
 
 `00-inicializar.sh` conecta a FREEPDB1 con APP_USER/APP_USER_PASSWORD del entorno.
-Ejecuta en orden los scripts 01–08 de `.scripts/`, una sola vez en volumen nuevo.
+Ejecuta en orden los scripts 01–09 de `.scripts/`, una sola vez en volumen nuevo.
 Cada fallo SQL/OS produce salida no cero; `06-verificar.sql` compila dependencias
 legacy y verifica objetos y datos antes de crear el marcador de readiness.
 
@@ -30,3 +30,7 @@ el Compose de FASE 2. Ver docs/FASE-2.md.
 FASE 3 actualiza con `.scripts/aplicar-ventas.sh` (07 y 08 idempotentes).
 Agrega Solicitud_Venta e índice de snapshots por venta, sin borrar ni reiniciar datos.
 No ejecutar 01–06 manualmente en una base existente. Ver docs/FASE-3.md.
+
+FASE 4 actualiza con `.scripts/aplicar-control.sh` (07, 08 y 09). Agrega fecha_cobro
+y Solicitud_Control, actualiza vistas/resúmenes por fecha de cobro y no borra datos.
+No ejecuta el legacy. Ver docs/FASE-4.md.

@@ -52,7 +52,10 @@ try {
   ana = await login('ana@demo.gasalpaso.test');
   bruno = await login('bruno@demo.gasalpaso.test');
   camila = await login('camila@demo.gasalpaso.test');
-  diego = await login('diego@demo.gasalpaso.test');
+  // Diego tiene un cierre demo: usar otro repartidor abierto para competir por stock.
+  const alterno = await pedir('POST', '/usuarios', { nombre: 'Alterno F3', email: `alterno-f3-${marca}@demo.test`,
+    password: 'GasPasoDemo2026!', rol: 'REPARTIDOR', comunas: [1] }, admin, 201);
+  diego = await login(alterno.email);
   const p1 = await producto('A', 15000, 30);
   const p2 = await producto('B', 20000, 20);
   await pedir('GET', '/carrito', undefined, undefined, 401);
@@ -111,7 +114,7 @@ try {
   await pedir('PATCH', `/pedidos/${web._id}/estado`, { estado: 'EN_CAMINO' }, camila);
   const camino = await pedir('PATCH', `/pedidos/${web._id}/estado`, { estado: 'EN_CAMINO' }, camila);
   comprobar(camino.historial_estados.length === 3, 'EN_CAMINO repetido es idempotente');
-  await pedir('PATCH', `/pedidos/${web._id}/asignar`, { id_empleado: 3 }, admin, 409);
+  await pedir('PATCH', `/pedidos/${web._id}/asignar`, { id_empleado: alterno.id_empleado }, admin, 409);
   await pedir('PATCH', `/pedidos/${web._id}/estado`, { estado: 'ENTREGADO' }, camila, 400);
   const entregado = await pedir('PATCH', `/pedidos/${web._id}/estado`, { estado: 'ENTREGADO', metodo_pago: 'TRANSFERENCIA' }, camila);
   comprobar(entregado.estado_pago === 'COBRADA' && entregado.metodo_pago === 'TRANSFERENCIA' && entregado.historial_estados.length === 4, 'Entrega cobra y registra historial');
@@ -136,7 +139,7 @@ try {
   comprobar(dia.ventas.every(v => v.id_empleado === 2), 'Listado diario no filtra ventas ajenas');
   await pedir('GET', '/ventas/dia?id_empleado=3', undefined, camila, 403);
   await pedir('GET', '/ventas/dia', undefined, ana, 403);
-  const suma = (await sql("SELECT NVL(SUM(total_venta),0) FROM Venta WHERE id_empleado=2 AND estado_pago='COBRADA' AND fecha_venta>=TO_DATE(:fecha,'YYYY-MM-DD') AND fecha_venta<TO_DATE(:fecha,'YYYY-MM-DD')+1", { fecha: dia.fecha }))[0][0];
+  const suma = (await sql("SELECT NVL(SUM(total_venta),0) FROM Venta WHERE id_empleado=2 AND estado_pago='COBRADA' AND NVL(fecha_cobro,fecha_venta)>=TO_DATE(:fecha,'YYYY-MM-DD') AND NVL(fecha_cobro,fecha_venta)<TO_DATE(:fecha,'YYYY-MM-DD')+1", { fecha: dia.fecha }))[0][0];
   comprobar(dia.resumen.total_cobrado === suma, 'Resumen diario cuadra con Oracle');
 
   const llamada = await telefono(2, [{ id_producto: p2.id_producto, cantidad: 1 }], `telefono-${marca}`);
@@ -201,7 +204,7 @@ try {
 
   const reasignado = await telefono(1, [{ id_producto: p1.id_producto, cantidad: 1 }], `reasignado-${marca}`);
   await pedir('PATCH', `/pedidos/${reasignado._id}/asignar`, { id_empleado: 2 }, admin);
-  await pedir('PATCH', `/pedidos/${reasignado._id}/asignar`, { id_empleado: 3 }, admin);
+  await pedir('PATCH', `/pedidos/${reasignado._id}/asignar`, { id_empleado: alterno.id_empleado }, admin);
   await mongoDb.collection('pedidos').updateOne({ _id: new ObjectId(reasignado._id) }, { $set: { repartidor: { id_empleado: 2, nombre: 'Camila Soto' }, 'items.0.cantidad': 999, 'items.0.precio_unitario': 1 } });
   comprobar(!(await pedir('GET', '/pedidos/asignados', undefined, camila)).some(p => p._id === reasignado._id), 'Una copia Mongo atrasada no revela pedidos reasignados al repartidor anterior');
   await pedir('GET', `/pedidos/${reasignado._id}`, undefined, camila, 404);

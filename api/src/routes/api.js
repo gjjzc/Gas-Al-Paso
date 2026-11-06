@@ -7,6 +7,7 @@ import * as catalogo from '../controllers/catalogo.js';
 import * as auditoria from '../controllers/auditoria.js';
 import * as carrito from '../controllers/carrito.js';
 import * as ventas from '../controllers/ventas.js';
+import * as control from '../controllers/control.js';
 
 export const apiRouter = Router();
 apiRouter.post('/auth/login', auth.login);
@@ -54,3 +55,8 @@ apiRouter.patch('/pedidos/:id/cancelar', autenticar, permitir('ADMIN', 'CLIENTE'
 apiRouter.delete('/pedidos/:id', autenticar, permitir('ADMIN'), ventas.eliminar);
 apiRouter.post('/ventas/calle', autenticar, permitir('REPARTIDOR'), ventas.calle);
 apiRouter.get('/ventas/dia', autenticar, permitir('ADMIN', 'REPARTIDOR'), ventas.dia);
+
+apiRouter.post('/cargas', autenticar, permitir('ADMIN'), control.cargar);
+apiRouter.get('/cargas', autenticar, permitir('ADMIN'), control.cargas);
+apiRouter.post('/cierre', autenticar, permitir('REPARTIDOR'), control.cerrar);
+apiRouter.get('/cuadratura', autenticar, permitir('ADMIN'), control.cuadratura);

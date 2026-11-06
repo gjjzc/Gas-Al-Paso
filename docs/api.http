@@ -351,3 +351,87 @@ Content-Type: application/json
 ### Consultar rechazos por stock
 GET {{base}}/auditoria?tipo=VENTA_RECHAZADA_STOCK
 Authorization: Bearer {{tokenAdmin}}
+
+# ================================================================
+# FASE 4: control diario. Crear un repartidor nuevo para la demostracion:
+# los cierres son finales y las cuentas demo pueden tener pedidos pendientes.
+# ================================================================
+@idRepControl = {{crearRepControl.response.body.$.id_empleado}}
+@tokenControl = {{loginControl.response.body.$.token}}
+
+### ADMIN crea un repartidor de prueba (cambiar email en una nueva demostracion)
+# @name crearRepControl
+POST {{base}}/usuarios
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nombre":"Control diario demo","email":"control-diario@demo.gasalpaso.test","password":"ClaveControlDemo2026!","rol":"REPARTIDOR","comunas":[1]}
+
+### Login del repartidor nuevo
+# @name loginControl
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{"email":"control-diario@demo.gasalpaso.test","password":"ClaveControlDemo2026!"}
+
+### ADMIN registra 3 balones. Carga de control: no modifica Productos.stock.
+POST {{base}}/cargas
+Authorization: Bearer {{tokenAdmin}}
+Idempotency-Key: f4-carga-demo-001
+Content-Type: application/json
+
+{"id_empleado":{{idRepControl}},"items":[{"id_producto":2,"cantidad_cargada":3}]}
+
+### ADMIN suma una recarga: quedan 4. Reintentar esta clave no vuelve a sumar.
+POST {{base}}/cargas
+Authorization: Bearer {{tokenAdmin}}
+Idempotency-Key: f4-recarga-demo-001
+Content-Type: application/json
+
+{"id_empleado":{{idRepControl}},"items":[{"id_producto":2,"cantidad_cargada":1}]}
+
+### Cargas de hoy; tambien admite fecha=AAAA-MM-DD
+GET {{base}}/cargas?id_empleado={{idRepControl}}
+Authorization: Bearer {{tokenAdmin}}
+
+### Venta de 2 balones de 11 kg: con precio demo total $27.000 tras descuento
+POST {{base}}/ventas/calle
+Authorization: Bearer {{tokenControl}}
+Idempotency-Key: f4-venta-demo-001
+Content-Type: application/json
+
+{"items":[{"id_producto":2,"cantidad":2}],"metodo_pago":"EFECTIVO"}
+
+### Cuadratura antes de cerrar: ABIERTO, esperado calculado en Oracle
+GET {{base}}/cuadratura?id_empleado={{idRepControl}}
+Authorization: Bearer {{tokenAdmin}}
+
+### Cierre equilibrado: con precio demo 4 cargados = 2 vendidos + 2 devueltos
+# Usar los importes esperados del reporte anterior si se cambiaron los precios.
+POST {{base}}/cierre
+Authorization: Bearer {{tokenControl}}
+Idempotency-Key: f4-cierre-demo-001
+Content-Type: application/json
+
+{"entregado_efectivo":27000,"entregado_transferencia":0,"devueltos":[{"id_producto":2,"devuelto":2}],"observacion":"Todo cuadra"}
+
+### Resultado: CUADRADO, dinero y balones con diferencia cero
+GET {{base}}/cuadratura?id_empleado={{idRepControl}}
+Authorization: Bearer {{tokenAdmin}}
+
+### Reporte general; fecha opcional corresponde a fecha de cobro
+GET {{base}}/cuadratura
+Authorization: Bearer {{tokenAdmin}}
+
+### Auditoria de cierres (ADMIN); tambien admite fecha e id_usuario
+GET {{base}}/auditoria?tipo=CIERRE_CAJA&id_empleado={{idRepControl}}
+Authorization: Bearer {{tokenAdmin}}
+
+### Auditoria de recargas
+GET {{base}}/auditoria?tipo=CARGA_DIARIA&id_empleado={{idRepControl}}
+Authorization: Bearer {{tokenAdmin}}
+
+# Para demostrar DESCUADRE, usar OTRO repartidor sin cerrar:
+# - Mismo movimiento, entregar efectivo 26000 en vez de 27000 => diferencia -1000.
+# - Entregar 27000 pero devolver 1 en vez de 2 balones => diferencia de balones -1.
+# No se puede modificar un cierre ya guardado con otro POST.
