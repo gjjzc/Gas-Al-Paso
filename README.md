@@ -1,17 +1,18 @@
-# Gas al Paso — FASE 4: control diario
+# Gas al Paso — FASE 5: frontend base y CLIENTE
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
 Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos, tarreo, cargas, cierre y cuadratura diaria.
-El frontend todavía muestra únicamente **Gas al Paso**: sus pantallas comerciales
-corresponden a una fase posterior.
+El frontend incluye catálogo, login/registro, carrito, confirmación e historial del CLIENTE.
+Las pantallas operativas de ADMIN y REPARTIDOR se implementarán en las fases siguientes.
 
-## Actualizar desde FASE 3 (sin borrar datos)
+## Actualizar desde FASE 4 (sin borrar datos)
 
-Seguir [las instrucciones de FASE 4](docs/FASE-4.md#actualizar-desde-fase-3-sin-borrar-las-bases):
-conservar `.env` y JWT_SECRET, aplicar **solo** `.scripts/aplicar-control.sh` y reconstruir
-la API. **No ejecutar `down -v` ni el legacy para esta actualización.** Si todavía
-se usa FASE 1, agregar JWT_SECRET como explica FASE 2; el actualizador incluye 07, 08 y 09.
-Los ejemplos completos de cada endpoint están en [docs/api.http](docs/api.http).
+Seguir [FASE 5: actualización y pruebas](docs/FASE-5.md). Conservar `.env`, JWT_SECRET
+y puertos; reconstruir los servicios con `docker compose up -d --build`.
+Esta fase no requiere cambios en las bases. **No usar `down -v`.**
+Si falta FASE 4, aplicar primero [su migración](docs/FASE-4.md).
+El flujo completo del cliente se prueba en http://localhost:3000; el seguimiento
+consulta los cambios del repartidor cada 5 segundos en el detalle.
 
 ## Descargar y abrir en VS Code
 
@@ -119,7 +120,7 @@ El borrado TTL es asíncrono: puede tardar alrededor de un minuto después de ex
 **Estas credenciales son públicas, solo para desarrollo y nunca para producción.**
 Todas usan la contraseña ficticia **`GasPasoDemo2026!`**. En Oracle solo se guardan
 hashes bcrypt distintos, con costo 12. Son usuarios de la aplicación, no usuarios
-para SQL Developer ni Compass. El login ya funciona mediante `POST /api/auth/login`; todavía no hay pantalla de login.
+para SQL Developer ni Compass. El login funciona en http://localhost:3000/login y mediante `POST /api/auth/login`.
 
 | Email | Rol | Vínculo |
 | --- | --- | --- |
