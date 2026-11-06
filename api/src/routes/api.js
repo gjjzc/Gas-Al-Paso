@@ -58,5 +58,6 @@ apiRouter.get('/ventas/dia', autenticar, permitir('ADMIN', 'REPARTIDOR'), ventas
 
 apiRouter.post('/cargas', autenticar, permitir('ADMIN'), control.cargar);
 apiRouter.get('/cargas', autenticar, permitir('ADMIN'), control.cargas);
+apiRouter.get('/cierre', autenticar, permitir('REPARTIDOR'), control.propio);
 apiRouter.post('/cierre', autenticar, permitir('REPARTIDOR'), control.cerrar);
 apiRouter.get('/cuadratura', autenticar, permitir('ADMIN'), control.cuadratura);

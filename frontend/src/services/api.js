@@ -64,3 +64,10 @@ export const fecha = (valor) =>
         timeStyle: 'short',
       }).format(new Date(valor))
     : '—';
+
+// getRandomValues tambien funciona al abrir http://IP_DEL_PC desde el celular.
+// randomUUID exige contexto seguro y no esta disponible en ese caso.
+export function nuevaClave() {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}

@@ -1394,3 +1394,343 @@ td:last-child {
     scroll-behavior: auto !important;
   }
 }
+
+/* Jornada del repartidor: controles tactiles y tarjetas legibles en celular. */
+.zona-repartidor {
+  max-width: 1050px;
+  margin: auto;
+}
+.zona-repartidor .boton {
+  min-height: 52px;
+  font-size: 0.95rem;
+}
+.zona-repartidor input,
+.zona-repartidor select {
+  min-height: 52px;
+  font-size: 1rem;
+}
+.nav-jornada {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 32px;
+  padding: 8px;
+  border: 1px solid var(--color-borde);
+  border-radius: 14px;
+  background: white;
+}
+.nav-jornada a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  text-align: center;
+  padding: 9px 4px !important;
+  border-radius: 9px;
+  border: 0 !important;
+  font-size: 0.85rem !important;
+}
+.nav-jornada a.active {
+  background: var(--color-principal);
+  color: white !important;
+}
+.ruta-pedidos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.ruta-pedido header,
+.venta-cabecera {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ruta-pedido h2 {
+  font-size: 1.35rem;
+}
+.ruta-pedido address {
+  font-style: normal;
+  margin: 12px 0 20px;
+  padding: 18px;
+  border-radius: 10px;
+  background: #f1f5fc;
+}
+.ruta-pedido address strong,
+.ruta-pedido address span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.ruta-pedido address strong {
+  font-size: 1.15rem;
+  margin-bottom: 5px;
+}
+.cobro-pedido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+  font-size: 0.85rem;
+}
+.cobro-pedido > strong {
+  font-size: 1.5rem;
+  color: var(--color-principal);
+}
+.llamar,
+.accion-ruta {
+  width: 100%;
+  margin-top: 12px;
+}
+.zona-repartidor details {
+  margin: 20px 0;
+}
+.zona-repartidor summary {
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--color-principal);
+  font-weight: 600;
+  padding: 10px 0;
+}
+.indicadores-jornada {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0 28px;
+}
+.indicadores-jornada .tarjeta {
+  padding: 22px;
+}
+.indicadores-jornada small,
+.indicadores-jornada strong,
+.indicadores-jornada span {
+  display: block;
+}
+.indicadores-jornada strong {
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  color: var(--color-principal);
+  margin: 8px 0;
+}
+.indicadores-jornada span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+.indicadores-jornada p {
+  font-size: 0.85rem;
+  margin: 12px 0 0;
+}
+.selector-productos {
+  display: grid;
+  gap: 14px;
+}
+.selector-producto {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+.selector-producto > .ilustracion {
+  width: 85px;
+  flex-shrink: 0;
+}
+.selector-producto > div {
+  flex: 1;
+  min-width: 0;
+}
+.selector-producto h2 {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+  margin-bottom: 8px;
+}
+.selector-producto p {
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+.selector-producto .cantidad {
+  gap: 8px;
+}
+.selector-producto .cantidad input {
+  text-align: center;
+  width: 80px;
+  padding: 7px;
+}
+.selector-producto .cantidad .boton {
+  width: 52px;
+  min-height: 52px;
+}
+.quitar-linea {
+  display: block;
+  border: 0;
+  background: none;
+  padding: 10px 0;
+  min-height: 44px;
+  color: var(--color-principal);
+  text-decoration: underline;
+}
+.acciones-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.recibo-venta {
+  max-width: 620px;
+  margin: 20px auto;
+}
+.ventas-lista,
+.balones-cierre {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.venta-cabecera h2 {
+  font-size: 1.2rem;
+}
+.venta-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--color-borde);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.venta-total > strong {
+  color: var(--color-principal);
+  font-size: 1.6rem;
+}
+.pendientes-cierre {
+  background: #fff4e9;
+  border-color: #edc59d;
+  margin-bottom: 24px;
+}
+.pendientes-cierre ul {
+  padding-left: 20px;
+}
+.declaracion-cierre h2 {
+  margin-top: 25px;
+}
+.declaracion-cierre h2:first-child {
+  margin-top: 0;
+}
+.devolucion-balon {
+  border: 1px solid var(--color-borde);
+  border-radius: 12px;
+  padding: 18px;
+  background: #f7f9fc;
+}
+.devolucion-balon h3 {
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+.declaracion-cierre > .boton {
+  width: 100%;
+}
+.declaracion-cierre > .campo {
+  margin-top: 25px;
+}
+.cuadratura-resultado > .aviso {
+  justify-content: space-between;
+}
+.datos-balon {
+  margin: 20px 0 0;
+  font-size: 0.9rem;
+}
+.datos-balon div {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+.datos-balon dd {
+  margin: 0;
+  font-weight: 700;
+}
+.texto-error {
+  color: var(--color-error);
+  font-weight: 600;
+}
+.texto-exito {
+  color: var(--color-exito);
+  font-weight: 600;
+}
+.operacion-pendiente {
+  background: #fff7eb;
+  border-color: #edc59d;
+  margin-bottom: 24px;
+}
+.dialogo {
+  color: var(--color-texto);
+  border: 1px solid var(--color-borde);
+  border-radius: 20px;
+  width: min(550px, calc(100% - 24px));
+  max-height: calc(100dvh - 32px);
+  padding: 28px;
+  box-shadow: 0 20px 70px #08294b40;
+  overflow-y: auto;
+}
+.dialogo::backdrop {
+  background: #09294bd1;
+}
+.dialogo h2 {
+  color: var(--color-principal);
+  font-size: 1.6rem;
+}
+.dialogo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 25px;
+}
+.dialogo-acciones > .boton {
+  flex: 1;
+  min-height: 52px;
+}
+@media (max-width: 760px) {
+  .nav-jornada {
+    gap: 3px;
+    padding: 5px;
+    position: sticky;
+    top: 6px;
+    z-index: 5;
+    box-shadow: 0 4px 20px #102e5814;
+  }
+  .nav-jornada a {
+    font-size: 0.7rem !important;
+  }
+  .ruta-pedidos,
+  .ventas-lista,
+  .balones-cierre {
+    grid-template-columns: 1fr;
+  }
+  .indicadores-jornada {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .indicadores-jornada .tarjeta {
+    padding: 18px 22px;
+  }
+  .indicadores-jornada strong {
+    font-size: 1.9rem;
+  }
+  .ruta-pedido {
+    padding: 23px;
+  }
+  .selector-producto {
+    padding: 16px 12px;
+    gap: 6px;
+  }
+  .selector-producto > .ilustracion {
+    width: 62px;
+  }
+  .selector-producto .cantidad input {
+    width: 72px;
+  }
+  .dialogo {
+    padding: 24px;
+  }
+  .dialogo-acciones {
+    flex-direction: column-reverse;
+  }
+  .dialogo-acciones > .boton {
+    width: 100%;
+  }
+}

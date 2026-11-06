@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/Auth.jsx';
 import { useCarrito } from '../context/Carrito.jsx';
 import { useConsulta } from '../hooks/useConsulta.js';
-import { api, clp } from '../services/api.js';
+import { api, clp, nuevaClave } from '../services/api.js';
 import {
   Boton,
   Campo,
@@ -42,7 +42,7 @@ export function Confirmar() {
     if (bloqueo.current) return;
     const campos = Object.fromEntries(new FormData(e.currentTarget));
     const datos = pendiente || {
-      key: crypto.randomUUID(),
+      key: nuevaClave(),
       carrito,
       body: {
         direccion_entrega: {

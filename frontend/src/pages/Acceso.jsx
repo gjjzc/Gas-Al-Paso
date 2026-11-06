@@ -36,7 +36,11 @@ export function Login() {
           ? permitido
             ? destino
             : '/catalogo'
-          : '/mi-espacio',
+          : usuario.rol === 'REPARTIDOR'
+            ? typeof destino === 'string' && /^\/repartidor(\/|$)/.test(destino)
+              ? destino
+              : '/repartidor/pedidos'
+            : '/mi-espacio',
         { replace: true },
       );
     } catch (e) {
