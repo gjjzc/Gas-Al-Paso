@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../components/ImagenProducto.jsx';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useConsulta } from '../hooks/useConsulta.js';
@@ -227,7 +228,7 @@ export function Pedido() {
                   >
                     {pedido.items.map((i) => (
                       <tr key={i.id_producto}>
-                        <td>{i.nombre}</td>
+                        <td><ImagenProducto producto={i} className="foto-mini" />{i.nombre}</td>
                         <td>{i.cantidad}</td>
                         <td>{clp(i.precio_unitario)}</td>
                         <td>{clp(i.cantidad * i.precio_unitario)}</td>

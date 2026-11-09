@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useCarrito } from '../context/Carrito.jsx';
-import { Balon } from '../components/Ilustraciones.jsx';
+import { ImagenProducto } from '../components/ImagenProducto.jsx';
 import {
   Boton,
   Cargando,
@@ -55,10 +55,7 @@ export function Carrito() {
                 className="carrito-item"
                 key={item.id_producto}
               >
-                <Balon
-                  peso={item.nombre.match(/(\d+)\s*kg/i)?.[1] || 15}
-                  accesorio={!/gas/i.test(item.nombre)}
-                />
+                <ImagenProducto producto={item} />
                 <div className="carrito-item-info">
                   <h2>{item.nombre}</h2>
                   <p className="muted">

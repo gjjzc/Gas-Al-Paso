@@ -1,19 +1,29 @@
-# Gas al Paso — FASE 7: frontend ADMIN
+# Gas al Paso — mejoras de clientes e imágenes locales (sobre FASE 7)
 
 Proyecto académico de venta y reparto de gas. Infraestructura con React + Vite,
 Node.js + Express, Oracle Free (driver thin) y MongoDB 7. La API implementa login, JWT/roles, catálogo, administración, carrito, pedidos, tarreo, cargas, cierre y cuadratura diaria.
 El frontend incluye CLIENTE, jornada REPARTIDOR y administración completa: pedidos,
 llamadas, cargas, catálogo, usuarios, comunas de reparto, cuadratura y auditoría.
 
-## Actualizar desde FASE 6 (sin borrar datos)
+## CAMBIOS 1 y 2: clientes por teléfono
 
-Seguir [FASE 7: actualización y ciclo completo del administrador](docs/FASE-7.md).
-Conservar `.env`, JWT_SECRET y puertos. Reconstruir API y frontend con
-`docker compose up -d --build`. No agrega migraciones. **No usar `down -v`.**
-Si falta FASE 4, aplicar primero [su migración](docs/FASE-4.md).
-Iniciar sesión en http://localhost:3000: ADMIN accede a `/admin/pedidos`,
-REPARTIDOR a `/repartidor/pedidos` y CLIENTE a su catálogo y pedidos.
-La guía incluye una demostración de toda la jornada usando cuentas nuevas.
+ADMIN puede crear llamadas sin cuenta, buscar por al menos cuatro dígitos, abrir fichas,
+corregir nombre/dirección e iniciar un nuevo pedido con datos precargados. Registro web
+posterior vincula al Cliente existente. Ver [CAMBIO 1](docs/CAMBIO-1-pedido-telefonico.md)
+y [CAMBIO 2: contrato, pruebas y actualización acumulativa](docs/CAMBIO-2-buscar-cliente-telefono.md).
+Rama actual `feature/imagenes-productos`, incluye cambios 1 y 2.
+Aplicar `.scripts/aplicar-clientes.sh` (10 y 11) con API/frontend detenidos y reconstruir.
+Conservar `.env`, JWT_SECRET y volúmenes. **No usar `down -v`.** El índice Mongo se crea
+sin reinicializar colecciones. Revisar las tres mejoras antes de subirlas juntas.
+
+## CAMBIO 3: imágenes locales
+
+Fotos en catálogo, carrito y pedidos, editor ADMIN con vista previa y reemplazo SVG.
+[Guía acumulativa para instalar los tres cambios y probarlos](docs/CAMBIO-3-imagenes-productos.md).
+Incluye seis PNG de producto generados con OpenAI, con fondo blanco y estilo comercial
+uniforme. Son referenciales; [procedencia y tamaños](docs/creditos-imagenes.md). `node scripts/revisar-imagenes.mjs` informa archivos >200 KB.
+Aplicar la migración Mongo con `docker compose exec -T mongo bash /docker-entrypoint-initdb.d/migraciones/aplicar-imagenes-profesionales.sh`.
+No requiere borrar bases, pedidos ni carritos. Reconstruir frontend después de agregar fotos.
 
 ## Descargar y abrir en VS Code
 
@@ -142,7 +152,7 @@ Ver [documentación de FASE 4](docs/FASE-4.md) para control diario y cierre; [do
 
 Oracle monta `db/oracle/` en `/container-entrypoint-initdb.d`. Su lanzador
 `00-inicializar.sh` conecta como usuario de aplicación y ejecuta los SQL numerados
-01–09 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
+01–11 de `db/oracle/.scripts/`. La carpeta es oculta para evitar que el entrypoint
 oficial los ejecute además como SYS. No omitirla al copiar el proyecto.
 El archivo legacy original permanece intacto en `db/oracle/legacy/` y se ejecuta
 explícitamente desde el script 01, incluidas sus pruebas y su rollback.

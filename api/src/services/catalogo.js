@@ -1,13 +1,14 @@
+import { imagenLocal } from './imagenes.js';
 import { mongoDb, conectarMongo } from '../config/databases.js';
 import { conConexion, consultar, transaccion, salidaNumero } from './oracle.js';
 import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
 import { exigir } from '../middlewares/validar.js';
 
 const columnas = 'id_producto,nombre,descripcion,peso,valor_unitario,stock,activo';
-const imagenPredeterminada = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"%3E%3Crect x="55" y="45" width="90" height="120" rx="25" fill="%230B3D91"/%3E%3Cpath d="M80 45V25h40v20" fill="none" stroke="%23FF6B1A" stroke-width="10"/%3E%3C/svg%3E';
+
 function publicar(oracle, metadata = {}) {
   const { _id, ...catalogo } = metadata;
-  return { ...catalogo, id_producto: oracle.id_producto, nombre: oracle.nombre,
+  return { ...catalogo, imagen: imagenLocal(catalogo.imagen), id_producto: oracle.id_producto, nombre: oracle.nombre,
     descripcion: oracle.descripcion, peso: oracle.peso, precio: oracle.valor_unitario,
     stock: oracle.stock, activo: oracle.activo === 1 };
 }
@@ -43,7 +44,7 @@ export async function crear(datos, usuario) {
     });
     const id = r.outBinds.id[0];
     const metadata = { id_producto: id, nombre: datos.nombre, descripcion: datos.descripcion,
-      categoria: datos.categoria, imagen: datos.imagen || imagenPredeterminada,
+      categoria: datos.categoria, imagen: imagenLocal(datos.imagen),
       atributos: datos.atributos || {}, destacado: datos.destacado ?? false, activo: datos.activo ?? true };
     const eventos = [await encolar(c, 'CATALOGO_CREAR', metadata)];
     eventos.push(await auditar(c, 'CAMBIO_PRECIO', usuario, { id_producto: id, antes: null, despues: datos.precio, creacion: true }));

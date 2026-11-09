@@ -27,6 +27,8 @@ CONNECT ${APP_USER}/"${APP_USER_PASSWORD}"@//localhost:1521/FREEPDB1
 @/container-entrypoint-initdb.d/.scripts/07-api.sql
 @/container-entrypoint-initdb.d/.scripts/08-ventas-api.sql
 @/container-entrypoint-initdb.d/.scripts/09-control-diario.sql
+@/container-entrypoint-initdb.d/.scripts/10-cliente-telefono.sql
+@/container-entrypoint-initdb.d/.scripts/11-direccion-cliente.sql
 EXIT SUCCESS
 SQL
 # Solo se publica readiness cuando todas las migraciones terminaron sin errores.

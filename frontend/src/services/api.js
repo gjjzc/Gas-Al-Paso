@@ -5,9 +5,10 @@ export const sesion = {
   borrar: () => sessionStorage.removeItem(TOKEN),
 };
 export class ErrorApi extends Error {
-  constructor(mensaje, estado = 0) {
+  constructor(mensaje, estado = 0, campos) {
     super(mensaje);
     this.estado = estado;
+    this.campos = campos;
   }
 }
 export async function api(
@@ -38,6 +39,7 @@ export async function api(
         datos?.mensaje ||
           'No pudimos completar la solicitud. Intenta nuevamente.',
         respuesta.status,
+        datos?.campos,
       );
     }
     if (datos === null)

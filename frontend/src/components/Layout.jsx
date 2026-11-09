@@ -95,7 +95,7 @@ export function Layout() {
           Gas al Paso<span className="punto">.</span>
         </span>
         <span>Gas para tu hogar. A un paso de ti.</span>
-        <small>Proyecto académico · Venta y reparto de gas</small>
+        <small>Proyecto académico · Venta y reparto de gas<br /><a href="/creditos-imagenes.html">Créditos de imágenes</a></small>
       </footer>
     </>
   );

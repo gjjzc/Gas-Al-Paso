@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../components/ImagenProducto.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/Auth.jsx';
@@ -195,7 +196,7 @@ export function Confirmar() {
           <ul className="resumen-items">
             {resumen.items.map((i) => (
               <li key={i.id_producto}>
-                <span>
+                <span className="producto-con-foto"><ImagenProducto producto={i} className="foto-mini" />
                   {i.cantidad} × {i.nombre}
                 </span>
                 <strong>{clp(i.cantidad * i.precio_unitario)}</strong>

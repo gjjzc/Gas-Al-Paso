@@ -1,3 +1,4 @@
+import { telefonoPrueba } from './datos.js';
 import { test, expect } from '@playwright/test';
 test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para las bases demo.');
 async function api(request, method, ruta, body, token, estado) {
@@ -39,14 +40,16 @@ async function usuarioUI(page, { nombre, email, rol, clave }) {
   await page.getByLabel('Rol del usuario').selectOption(rol);
   await page.getByLabel('Contraseña inicial').fill(clave);
   if (rol === 'CLIENTE') {
-    await page.getByLabel('Teléfono del cliente').fill('+56912345678');
+    await page.getByLabel('Teléfono del cliente').fill(telefonoPrueba());
     await page.getByLabel('Comuna del cliente').selectOption('1');
     await page.getByLabel('Dirección del cliente').fill('Calle Admin 123');
   }
   await page
     .getByRole('button', { name: 'Guardar usuario', exact: true })
     .click();
-  await expect(page.locator('.aviso-exito[role="status"]')).toContainText('Usuario creado.');
+  await expect(page.locator('.aviso-exito[role="status"]')).toContainText(
+    'Usuario creado.',
+  );
   await expect(
     page.getByRole('heading', { name: 'Nuevo usuario', exact: true }),
   ).toHaveCount(0);
@@ -67,7 +70,9 @@ async function productoUI(page, { nombre, precio, peso, categoria }) {
   await page
     .getByRole('button', { name: 'Guardar producto', exact: true })
     .click();
-  await expect(page.locator('.aviso-exito[role="status"]')).toContainText('Producto creado.');
+  await expect(page.locator('.aviso-exito[role="status"]')).toContainText(
+    'Producto creado.',
+  );
 }
 async function buscarProducto(page, nombre) {
   await page
@@ -116,7 +121,13 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   );
   await api(request, 'GET', '/usuarios?rol=INVALIDO', undefined, token, 400);
   await api(request, 'GET', '/usuarios?activo=1', undefined, token, 400);
-  const literal = await api(request, 'GET', `/usuarios?buscar=${encodeURIComponent("' OR 1=1 --")}`, undefined, token);
+  const literal = await api(
+    request,
+    'GET',
+    `/usuarios?buscar=${encodeURIComponent("' OR 1=1 --")}`,
+    undefined,
+    token,
+  );
   expect(literal).toEqual([]);
 
   await productoUI(page, {
@@ -134,7 +145,9 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   await page
     .getByRole('button', { name: 'Guardar producto', exact: true })
     .click();
-  await expect(page.locator('.aviso-exito[role="status"]')).toContainText('Producto actualizado.');
+  await expect(page.locator('.aviso-exito[role="status"]')).toContainText(
+    'Producto actualizado.',
+  );
   fila = await buscarProducto(page, gasNombre);
   await fila
     .getByRole('button', { name: `Editar ${gasNombre}`, exact: true })
@@ -209,7 +222,9 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   await page
     .getByRole('button', { name: 'Guardar comunas', exact: true })
     .click();
-  await expect(page.locator('.aviso-exito[role="status"]')).toContainText('Cobertura guardada.');
+  await expect(page.locator('.aviso-exito[role="status"]')).toContainText(
+    'Cobertura guardada.',
+  );
   await nav(page, 'Cargas diarias');
   await page
     .getByLabel('Repartidor de la carga')
@@ -222,7 +237,9 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
     .getByRole('dialog')
     .getByRole('button', { name: 'Sumar carga', exact: true })
     .click();
-  await expect(page.locator('.aviso-exito[role="status"]')).toContainText('Se sumaron');
+  await expect(page.locator('.aviso-exito[role="status"]')).toContainText(
+    'Se sumaron',
+  );
   await page
     .getByRole('button', { name: 'Preparar otra carga', exact: true })
     .click();
@@ -241,23 +258,13 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
     (await api(request, 'GET', `/catalogo/${gas.id_producto}`)).stock,
   ).toBe(20);
   await nav(page, 'Pedido por llamada');
-  await page
-    .getByLabel('Buscar cliente por nombre o correo')
-    .fill(`cliente-admin-${marca}`);
-  await page
-    .getByRole('button', { name: 'Buscar cliente', exact: true })
-    .click();
-  await page
-    .getByRole('button', {
-      name: `${clienteNombre} · cliente-admin-${marca}@demo.test`,
-      exact: true,
-    })
-    .click();
+  await page.getByLabel('Nombre', { exact: true }).fill(clienteNombre);
+  await page.getByLabel('Teléfono', { exact: true }).fill(cliente.telefono);
   await seleccionarItem(page, gasNombre, 2);
-  await page.getByLabel('Calle de entrega').fill('Calle Admin');
-  await page.getByLabel('Número de entrega').fill('123');
-  await page.getByLabel('Comuna de entrega').selectOption('1');
-  await page.getByLabel('Referencia de entrega').fill('Portón administrativo');
+  await page.getByLabel('Calle', { exact: true }).fill('Calle Admin');
+  await page.getByLabel('Número', { exact: true }).fill('123');
+  await page.getByLabel('Comuna', { exact: true }).selectOption('1');
+  await page.getByLabel('Referencia (opcional)').fill('Portón administrativo');
   await expect(page.locator('.totales .total dd')).toHaveText('$27.000');
   await page
     .getByRole('button', { name: 'Revisar pedido telefónico', exact: true })
@@ -321,11 +328,9 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
     .getByRole('button', { name: 'Aplicar filtros', exact: true })
     .click();
   await expect(
-    page
-      .getByRole('article')
-      .filter({
-        has: page.getByRole('heading', { name: clienteNombre, exact: true }),
-      }),
+    page.getByRole('article').filter({
+      has: page.getByRole('heading', { name: clienteNombre, exact: true }),
+    }),
   ).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath('tablero-admin.png'),
@@ -402,11 +407,9 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   await page
     .getByRole('button', { name: 'Consultar cuadratura', exact: true })
     .click();
-  const trabajador = page
-    .getByRole('article')
-    .filter({
-      has: page.getByRole('heading', { name: repNombre, exact: true }),
-    });
+  const trabajador = page.getByRole('article').filter({
+    has: page.getByRole('heading', { name: repNombre, exact: true }),
+  });
   await expect(trabajador.getByText('Cuadrado', { exact: true })).toBeVisible();
   await expect(
     trabajador

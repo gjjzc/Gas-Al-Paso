@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../../components/ImagenProducto.jsx';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useConsulta } from '../../hooks/useConsulta.js';
@@ -207,7 +208,7 @@ export function PedidoAdmin() {
                 <ul className="resumen-items">
                   {p.items.map((i) => (
                     <li key={i.id_producto}>
-                      <span>
+                      <span className="producto-con-foto"><ImagenProducto producto={i} className="foto-mini" />
                         {i.cantidad} × {i.nombre}
                       </span>
                       <strong>{clp(i.cantidad * i.precio_unitario)}</strong>

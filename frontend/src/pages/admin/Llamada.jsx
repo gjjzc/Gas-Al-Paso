@@ -1,31 +1,79 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/Auth.jsx';
+import { BuscadorClientes } from '../../components/BuscadorClientes.jsx';
+import { FichaCliente } from '../../components/FichaCliente.jsx';
 import { useConsulta } from '../../hooks/useConsulta.js';
 import { useOperacion } from '../../hooks/useOperacion.js';
 import { calcularImportes } from '../../services/importes.js';
+import { normalizarTelefono } from '../../services/telefono.js';
 import {
   Boton,
   Campo,
   Cargando,
   Encabezado,
-  EnlaceBoton,
   ErrorAviso,
   Formulario,
   Tarjeta,
   Totales,
 } from '../../components/UI.jsx';
-import { SelectorItems, Paginacion } from '../../components/Admin.jsx';
+import { SelectorItems } from '../../components/Admin.jsx';
 import { Confirmacion } from '../../components/Confirmacion.jsx';
 import { OperacionPendiente, pago } from '../../components/Repartidor.jsx';
+function precargar(cliente, telefono = '') {
+  const d = cliente?.direccion_entrega_sugerida;
+  return {
+    nombre: cliente?.nombre || '',
+    telefono: cliente?.telefono || telefono,
+    calle: d?.calle || cliente?.direccion_principal || '',
+    numero: d?.numero || '',
+    comuna: String(cliente?.id_comuna || ''),
+    referencia: d?.referencia || '',
+    metodo: 'EFECTIVO',
+    guardar: false,
+  };
+}
+function CargarCliente({ id }) {
+  const consulta = useConsulta(`/clientes/${id}`);
+  if (consulta.cargando)
+    return <Cargando texto="Precargando datos del cliente…" />;
+  if (consulta.error)
+    return (
+      <ErrorAviso mensaje={consulta.error} reintentar={consulta.refrescar} />
+    );
+  return <FormularioLlamada clienteInicial={consulta.datos} />;
+}
 export function Llamada() {
-  const [busqueda, setBusqueda] = useState('');
-  const [buscar, setBuscar] = useState('');
-  const [pagina, setPagina] = useState(0);
-  const [cliente, setCliente] = useState(null);
+  const [query] = useSearchParams();
+  const location = useLocation();
+  const { usuario } = useAuth();
+  const id = query.get('cliente');
+  // Permitir recuperar la solicitud original aunque Mongo no este disponible para leer la ficha.
+  const pendiente = sessionStorage.getItem(
+    `gas-al-paso.operacion.${usuario.id_usuario}.admin-llamada`,
+  );
+  return id && !pendiente ? (
+    <CargarCliente key={id} id={id} />
+  ) : (
+    <FormularioLlamada
+      telefonoInicial={
+        typeof location.state?.telefono === 'string'
+          ? location.state.telefono
+          : ''
+      }
+    />
+  );
+}
+function FormularioLlamada({ clienteInicial = null, telefonoInicial = '' }) {
   const [seleccion, setSeleccion] = useState({});
   const [revision, setRevision] = useState(null);
-  const clientes = useConsulta(
-    `/usuarios?rol=CLIENTE&activo=true&limite=10&offset=${pagina * 10}&buscar=${encodeURIComponent(buscar)}`,
+  const [errores, setErrores] = useState({});
+  const [formulario, setFormulario] = useState(() =>
+    precargar(clienteInicial, telefonoInicial),
+  );
+  const [ficha, setFicha] = useState(null);
+  const [principalLibre, setPrincipalLibre] = useState(
+    Boolean(clienteInicial && !clienteInicial.direccion_entrega_sugerida),
   );
   const comunas = useConsulta('/comunas', { publico: true });
   const operacion = useOperacion('admin-llamada');
@@ -34,19 +82,54 @@ export function Llamada() {
     (a, b) => a.id_producto - b.id_producto,
   );
   const totales = calcularImportes(items);
+  function valor(campo) {
+    return {
+      value: formulario[campo],
+      onChange: (e) => {
+        setFormulario((a) => ({ ...a, [campo]: e.target.value }));
+        setErrores((a) => ({ ...a, [campo]: '' }));
+        operacion.limpiarErrorCampo(campo);
+      },
+    };
+  }
+  function cambiarItems(cambio) {
+    setSeleccion(cambio);
+    setErrores((a) => ({ ...a, items: '' }));
+    operacion.limpiarErrorCampo('items');
+  }
   function revisar(e) {
     e.preventDefault();
-    if (!cliente || !items.length) return;
-    const f = new FormData(e.currentTarget);
+    const errores = {};
+    const f = formulario;
+    if (f.nombre.trim().length < 2 || f.nombre.trim().length > 80)
+      errores.nombre = 'Ingresa un nombre de 2 a 80 caracteres.';
+    if (!normalizarTelefono(f.telefono))
+      errores.telefono =
+        'Usa 9 dígitos comenzando con 9; también puedes escribir +56.';
+    if (!f.calle.trim() || f.calle.trim().length > 150)
+      errores.calle = 'Ingresa una calle de hasta 150 caracteres.';
+    if (!f.numero.trim() || f.numero.trim().length > 20)
+      errores.numero = 'Ingresa un número de hasta 20 caracteres.';
+    if (!comunas.datos?.some((c) => c.id_comuna === Number(f.comuna)))
+      errores.comuna = 'Selecciona una comuna de la lista.';
+    if (!items.length || items.length > 50)
+      errores.items =
+        'Selecciona entre 1 y 50 productos con cantidad mayor a cero.';
+    setErrores(errores);
+    if (Object.keys(errores).length) return;
     setRevision({
-      id_cliente: cliente.id_cliente,
-      direccion_entrega: {
-        calle: f.get('calle'),
-        numero: f.get('numero'),
-        id_comuna: Number(f.get('comuna')),
-        referencia: f.get('referencia'),
+      cliente: {
+        nombre: f.nombre.trim(),
+        telefono: normalizarTelefono(f.telefono),
+        direccion: {
+          calle: f.calle.trim(),
+          numero: f.numero.trim(),
+          comuna: Number(f.comuna),
+          referencia: f.referencia.trim(),
+        },
       },
-      metodo_cobro: f.get('metodo'),
+      guardar_como_principal: f.guardar,
+      metodo_cobro: f.metodo,
       items: items.map(({ id_producto, cantidad }) => ({
         id_producto,
         cantidad,
@@ -58,7 +141,7 @@ export function Llamada() {
       ruta: '/pedidos/telefonico',
       body: revision,
       vista: {
-        titulo: `Pedido por llamada · ${cliente.nombre}`,
+        titulo: `Pedido por llamada · ${formulario.nombre}`,
         total: totales.total,
       },
     });
@@ -71,173 +154,157 @@ export function Llamada() {
   }
   return (
     <>
-      <Encabezado
-        etiqueta="ATENCIÓN TELEFÓNICA"
-        titulo="Pedido por llamada"
-        accion={
-          <EnlaceBoton variante="secundario" to="/admin/usuarios">
-            Gestionar clientes
-          </EnlaceBoton>
-        }
-      >
-        Confirma quién llama, qué necesita y dónde lo recibe.
+      <Encabezado etiqueta="ATENCIÓN TELEFÓNICA" titulo="Pedido por llamada">
+        Solo necesitas los datos de contacto. No requiere cuenta, correo ni
+        contraseña.
       </Encabezado>
       <ErrorAviso mensaje={operacion.error} />
       <OperacionPendiente operacion={operacion} reintentar={reintentar} />
-      {!operacion.pendiente && (
-        <>
-          <Tarjeta>
-            <h2>1. Selecciona el cliente</h2>
-            <Formulario
-              className="formulario busqueda-admin"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setBuscar(busqueda);
-                setPagina(0);
+      <div hidden={!!operacion.pendiente}>
+        <Tarjeta className="buscador-en-llamada">
+          <h2>Buscar cliente (opcional)</h2>
+          <BuscadorClientes
+            onElegir={setFicha}
+            onCrear={(telefono) => {
+              setFormulario(precargar(null, telefono));
+              setFicha(null);
+              setErrores({});
+              setPrincipalLibre(false);
+            }}
+          />
+          {ficha && (
+            <FichaCliente
+              key={ficha}
+              id={ficha}
+              onNuevo={(c) => {
+                setFormulario(precargar(c));
+                setFicha(null);
+                setErrores({});
+                setPrincipalLibre(!c.direccion_entrega_sugerida);
               }}
-            >
-              <Campo
-                label="Buscar cliente por nombre o correo"
-                type="search"
-                maxLength={100}
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-              />
-              <Boton type="submit" variante="secundario">
-                Buscar cliente
-              </Boton>
-            </Formulario>
-            <ErrorAviso
-              mensaje={clientes.error}
-              reintentar={clientes.refrescar}
             />
-            {clientes.cargando ? (
-              <Cargando />
-            ) : (
-              <>
-                <div className="clientes-opciones">
-                  {clientes.datos?.map((c) => (
-                    <Boton
-                      variante={
-                        cliente?.id_usuario === c.id_usuario
-                          ? 'principal'
-                          : 'secundario'
-                      }
-                      key={c.id_usuario}
-                      onClick={() => setCliente(c)}
-                      aria-pressed={cliente?.id_usuario === c.id_usuario}
-                    >
-                      {c.nombre} · {c.email}
-                    </Boton>
-                  ))}
-                </div>
-                {!clientes.datos?.length && (
-                  <p className="nota">
-                    No hay clientes activos con esta búsqueda. Puedes crear uno
-                    en Usuarios.
-                  </p>
-                )}
-                <Paginacion
-                  pagina={pagina}
-                  cambiar={setPagina}
-                  longitud={clientes.datos?.length || 0}
-                  limite={10}
-                />
-              </>
-            )}
-            {cliente && (
-              <p className="aviso">
-                Cliente seleccionado: <strong>{cliente.nombre}</strong> ·{' '}
-                {cliente.telefono}
-              </p>
-            )}
-          </Tarjeta>
-          <Tarjeta className="seccion-admin">
-            <h2>2. Productos y cantidades</h2>
-            <SelectorItems seleccion={seleccion} cambiar={setSeleccion} />
-          </Tarjeta>
-          {cliente && (
-            <Formulario
-              key={cliente.id_usuario}
-              onSubmit={revisar}
-              className="formulario dos-columnas seccion-admin"
-            >
-              <Tarjeta>
-                <h2>3. Entrega y cobro</h2>
-                <p className="nota">
-                  Dirección principal: {cliente.direccion_principal}. Confirma
-                  calle y número por separado.
-                </p>
-                <ErrorAviso
-                  mensaje={comunas.error}
-                  reintentar={comunas.refrescar}
-                />
-                <div className="form-grid">
-                  <Campo
-                    label="Calle de entrega"
-                    name="calle"
-                    maxLength={150}
-                    required
-                  />
-                  <Campo
-                    label="Número de entrega"
-                    name="numero"
-                    maxLength={20}
-                    required
-                  />
-                </div>
-                <Campo
-                  label="Comuna de entrega"
-                  name="comuna"
-                  defaultValue={cliente.id_comuna || ''}
-                  required
-                >
-                  <option value="" disabled>
-                    Selecciona comuna
-                  </option>
-                  {comunas.datos?.map((c) => (
-                    <option key={c.id_comuna} value={c.id_comuna}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </Campo>
-                <Campo
-                  label="Referencia de entrega"
-                  name="referencia"
-                  maxLength={200}
-                />
-                <Campo
-                  label="Método de cobro solicitado"
-                  name="metodo"
-                  defaultValue="EFECTIVO"
-                >
-                  <option value="EFECTIVO">Efectivo</option>
-                  <option value="TRANSFERENCIA">Transferencia</option>
-                </Campo>
-              </Tarjeta>
-              <Tarjeta className="resumen">
-                <h2>Resumen de la llamada</h2>
-                <Totales datos={totales} />
-                <p className="nota">
-                  Cobro contra entrega. Oracle verificará precio y stock al
-                  guardar.
-                </p>
-                <Boton
-                  type="submit"
-                  disabled={
-                    !items.length ||
-                    items.length > 50 ||
-                    !comunas.datos?.length ||
-                    operacion.enviando
-                  }
-                >
-                  Revisar pedido telefónico
-                </Boton>
-              </Tarjeta>
-            </Formulario>
           )}
-        </>
-      )}
+        </Tarjeta>
+        {principalLibre && (
+          <p className="aviso">
+            La dirección principal está guardada como texto. Verifica la calle y
+            completa el número antes de confirmar; no hemos separado esos datos
+            automáticamente.
+          </p>
+        )}
+        <Tarjeta>
+          <h2>1. Productos y cantidades</h2>
+          <SelectorItems seleccion={seleccion} cambiar={cambiarItems} />
+          {errores.items && (
+            <p className="campo-error" role="alert">
+              {errores.items}
+            </p>
+          )}
+        </Tarjeta>
+        <Formulario
+          noValidate
+          onSubmit={revisar}
+          className="formulario dos-columnas seccion-admin"
+        >
+          <Tarjeta>
+            <h2>2. Contacto y entrega</h2>
+            <div className="form-grid">
+              <Campo
+                label="Nombre"
+                {...valor('nombre')}
+                maxLength={80}
+                autoComplete="name"
+                error={errores.nombre || operacion.errorCampos?.nombre}
+                required
+              />
+              <Campo
+                label="Teléfono"
+                {...valor('telefono')}
+                type="tel"
+                inputMode="tel"
+                maxLength={40}
+                autoComplete="tel"
+                ayuda="Ejemplo: 912345678 o +56 9 1234 5678. Reutilizaremos el cliente si su teléfono ya existe."
+                error={errores.telefono || operacion.errorCampos?.telefono}
+                required
+              />
+              <Campo
+                label="Calle"
+                {...valor('calle')}
+                maxLength={150}
+                autoComplete="address-line1"
+                error={errores.calle || operacion.errorCampos?.calle}
+                required
+              />
+              <Campo
+                label="Número"
+                {...valor('numero')}
+                maxLength={20}
+                error={errores.numero || operacion.errorCampos?.numero}
+                required
+              />
+            </div>
+            <ErrorAviso
+              mensaje={comunas.error}
+              reintentar={comunas.refrescar}
+            />
+            <Campo
+              label="Comuna"
+              {...valor('comuna')}
+              error={errores.comuna || operacion.errorCampos?.comuna}
+              required
+            >
+              <option value="">Selecciona comuna</option>
+              {comunas.datos?.map((c) => (
+                <option key={c.id_comuna} value={c.id_comuna}>
+                  {c.nombre}
+                </option>
+              ))}
+            </Campo>
+            <Campo
+              label="Referencia (opcional)"
+              {...valor('referencia')}
+              error={errores.referencia || operacion.errorCampos?.referencia}
+              maxLength={200}
+            />
+            <Campo label="Método de cobro" {...valor('metodo')}>
+              <option value="EFECTIVO">Efectivo</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+            </Campo>
+            <div className="checks-admin">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={formulario.guardar}
+                  onChange={(e) =>
+                    setFormulario((a) => ({ ...a, guardar: e.target.checked }))
+                  }
+                />
+                Guardar esta dirección como principal
+              </label>
+            </div>
+            <p className="nota">
+              Si el cliente ya existe, su dirección principal se conserva salvo
+              que marques esta opción. Un cliente nuevo guarda esta primera
+              dirección.
+            </p>
+          </Tarjeta>
+          <Tarjeta className="resumen">
+            <h2>Resumen de la llamada</h2>
+            <Totales datos={totales} />
+            <p className="nota">
+              10% de descuento desde $30.000. Pago contra entrega; el stock y el
+              precio definitivo se comprueban al confirmar.
+            </p>
+            <Boton
+              type="submit"
+              disabled={!comunas.datos?.length || operacion.enviando}
+            >
+              Revisar pedido telefónico
+            </Boton>
+          </Tarjeta>
+        </Formulario>
+      </div>
       {revision && (
         <Confirmacion
           titulo="Confirmar pedido por llamada"
@@ -247,8 +314,11 @@ export function Llamada() {
           aceptar={confirmar}
         >
           <p>
-            {cliente.nombre} · {revision.direccion_entrega.calle}{' '}
-            {revision.direccion_entrega.numero}
+            {revision.cliente.nombre} · {revision.cliente.telefono}
+          </p>
+          <p>
+            {revision.cliente.direccion.calle}{' '}
+            {revision.cliente.direccion.numero}
           </p>
           <p>{pago(revision.metodo_cobro)} contra entrega</p>
           <Totales datos={totales} />

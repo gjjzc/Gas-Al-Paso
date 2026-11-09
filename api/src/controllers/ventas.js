@@ -1,5 +1,6 @@
 import { campos, entero, idRuta, paginacion, texto, exigir } from '../middlewares/validar.js';
 import { metodoPago, direccion, lineas, idPedido, claveIdempotencia, fechaDia, estadosPedido } from '../middlewares/validar-ventas.js';
+import { validarTelefonico } from '../middlewares/validar-telefonico.js';
 import { crearVenta, ventasDia } from '../services/ventas.js';
 import * as pedidos from '../services/pedidos.js';
 
@@ -10,9 +11,7 @@ export async function confirmar(req, res) {
   res.status(resultado.reutilizada ? 200 : 201).json(resultado);
 }
 export async function telefonico(req, res) {
-  campos(req.body, ['id_cliente', 'direccion_entrega', 'metodo_cobro', 'items'], ['id_cliente', 'direccion_entrega', 'metodo_cobro', 'items']);
-  const resultado = await crearVenta(req.usuario, 'LLAMADA', { id_cliente: entero(req.body.id_cliente, 'id_cliente'),
-    direccion_entrega: direccion(req.body.direccion_entrega), metodo_cobro: metodoPago(req.body.metodo_cobro), items: lineas(req.body.items) },
+  const resultado = await crearVenta(req.usuario, 'LLAMADA', validarTelefonico(req.body),
     claveIdempotencia(req.get('Idempotency-Key')));
   res.status(resultado.reutilizada ? 200 : 201).json(resultado);
 }

@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../../components/ImagenProducto.jsx';
 import { useState } from 'react';
 import { useConsulta } from '../../hooks/useConsulta.js';
 import { useAccion } from '../../hooks/useAccion.js';
@@ -33,6 +34,7 @@ export function Productos() {
       peso: Number(f.get('peso')),
       precio: Number(f.get('precio')),
       stock: Number(f.get('stock')),
+      imagen: f.get('imagen').trim(),
       activo: f.has('activo'),
       destacado: f.has('destacado'),
     };
@@ -161,6 +163,14 @@ export function Productos() {
               defaultValue={editar.descripcion || ''}
               required
             />
+            <Campo label="Imagen: ruta local" name="imagen" maxLength={250}
+              placeholder="/productos/balon-11kg.png" value={editar.imagen || ''}
+              onChange={e => setEditar(actual => ({ ...actual, imagen: e.target.value }))}
+              ayuda="Archivo en frontend/public/productos/. Vacío usa la imagen de reemplazo." />
+            <div className="vista-previa-producto">
+              <p>Vista previa de la imagen</p>
+              <ImagenProducto producto={editar} />
+            </div>
             <div className="checks-admin">
               <label>
                 <input
@@ -215,7 +225,7 @@ export function Productos() {
                 {consulta.datos.map((p) => (
                   <tr key={p.id_producto}>
                     <td>
-                      <strong>{p.nombre}</strong>
+                      <ImagenProducto producto={p} className="foto-mini" /><strong>{p.nombre}</strong>
                       <small className="dato-secundario">{p.descripcion}</small>
                     </td>
                     <td>{p.categoria}</td>

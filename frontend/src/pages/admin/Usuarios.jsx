@@ -39,6 +39,13 @@ function EditorUsuario({ actual, comunas, guardar, cancelar, ocupado }) {
   return (
     <Tarjeta className="editor-admin">
       <h2>{actual.id_usuario ? 'Editar usuario' : 'Nuevo usuario'}</h2>
+      {actual.telefono_revision === 1 && (
+        <p className="aviso aviso-error">
+          Teléfono provisional de una migración: confirma con el cliente su
+          número real y actualízalo. No se usará para vincular otra cuenta
+          automáticamente.
+        </p>
+      )}
       <Formulario onSubmit={enviar}>
         <div className="form-grid">
           <Campo

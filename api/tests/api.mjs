@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 // Suite funcional: ejecutar en el contenedor API con datos demo de desarrollo.
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
@@ -82,7 +83,7 @@ try {
   comprobar(auditoria.every(e => e.usuario.id === admin.usuario.id_usuario && e.usuario.rol === 'ADMIN'), 'Actor auditado');
 
   const datosCliente = { nombre: 'Cliente prueba', email: `cliente-${sufijo}@demo.test`, password: 'GasPasoDemo2026!',
-    telefono: '+56900000999', direccion_principal: 'Direccion de prueba', id_comuna: 1 };
+    telefono: `9${randomInt(10000000,89999999)}`, direccion_principal: 'Direccion de prueba', id_comuna: 1 };
   await pedir('POST', '/auth/registro', { ...datosCliente, rol: 'ADMIN' }, undefined, 400);
   const creado = await pedir('POST', '/auth/registro', datosCliente, undefined, 201);
   comprobar(creado.usuario.rol === 'CLIENTE', 'Registro solo crea CLIENTE');
@@ -128,7 +129,7 @@ try {
   await pedir('POST', '/usuarios', { ...empleado, email: `invalido-${sufijo}@demo.test`, comunas: [999999] }, admin.token, 400);
   comprobar((await cc.execute('SELECT COUNT(*) FROM Empleado')).rows[0][0] === empleadosAntes, 'Altas rechazadas no dejan empleados huerfanos');
   await cc.close();
-  const clienteAdmin = await pedir('POST', '/usuarios', { ...datosCliente, email: `cliente-admin-${sufijo}@demo.test`, rol: 'CLIENTE' }, admin.token, 201);
+  const clienteAdmin = await pedir('POST', '/usuarios', { ...datosCliente, email: `cliente-admin-${sufijo}@demo.test`, telefono: `9${randomInt(10000000,89999999)}`, rol: 'CLIENTE' }, admin.token, 201);
   comprobar(clienteAdmin.rol === 'CLIENTE' && clienteAdmin.id_cliente, 'Alta de cliente por ADMIN');
   const repCreado = (await pedir('GET', '/repartidores?comuna=2', undefined, admin.token)).find(r => r.id_empleado === altaRep.id_empleado);
   comprobar(repCreado.cubre_comuna && repCreado.comunas.length === 2, 'Cobertura inicial del nuevo repartidor');

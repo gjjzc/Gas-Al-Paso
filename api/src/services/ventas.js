@@ -1,3 +1,4 @@
+import { conImagenes } from './imagenes.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 import oracledb from 'oracledb';
@@ -6,8 +7,10 @@ import { transaccion, conConexion, consultar, salidaNumero } from './oracle.js';
 import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
 import { bloquearCliente, leerCarrito, versionCarrito } from './carrito.js';
 import { exigir } from '../middlewares/validar.js';
+import { errorCampo } from '../middlewares/validar-cliente.js';
 import { ErrorHttp } from '../middlewares/errores.js';
 import { lineas } from '../middlewares/validar-ventas.js';
+import { buscarOCrearCliente, validarComuna, exigirContactoRevisado } from './clientes.js';
 import { asegurarDiaAbierto } from './jornada.js';
 
 function huella(valor) {
@@ -64,10 +67,18 @@ async function datosCliente(c, id) {
   exigir(cliente, 'Cliente no encontrado.', 404);
   return cliente;
 }
-async function datosDireccion(c, datos) {
-  const [comuna] = await consultar(c, 'SELECT nombre FROM Comuna WHERE id_comuna=:id', { id: datos.id_comuna });
-  exigir(comuna, 'Comuna no encontrada.', 404);
-  return { ...datos, comuna: comuna.nombre };
+async function datosDireccion(c, datos, telefonico=false) {
+  let comuna;
+  if(datos.nombre_comuna) {
+    [comuna]=await consultar(c,'SELECT id_comuna,nombre FROM Comuna WHERE LOWER(nombre)=LOWER(:nombre)',{nombre:datos.nombre_comuna});
+    if(!comuna)errorCampo('comuna','Selecciona una comuna existente.');
+  } else if(telefonico) comuna=await validarComuna(c,datos.id_comuna);
+  else {
+    [comuna]=await consultar(c,'SELECT id_comuna,nombre FROM Comuna WHERE id_comuna=:id',{id:datos.id_comuna});
+    exigir(comuna,'Comuna no encontrada.',404);
+  }
+  const {nombre_comuna,...resto}=datos;
+  return { ...resto, id_comuna:comuna.id_comuna, comuna: comuna.nombre };
 }
 async function auditarRechazo(usuario, canal, error) {
   const id = await transaccion(c => auditar(c, 'VENTA_RECHAZADA_STOCK', usuario, { canal, ...error.stock }));
@@ -115,8 +126,19 @@ export async function crearVenta(usuario, canal, datos, claveSolicitada) {
         empleado = admin.id_empleado;
       }
       if (canal === 'TARREO') await asegurarDiaAbierto(c, empleado);
-      const cliente = canal === 'TARREO' ? null : await datosCliente(c, canal === 'WEB' ? usuario.id_cliente : datos.id_cliente);
-      const direccion = canal === 'TARREO' ? null : await datosDireccion(c, datos.direccion_entrega);
+      const direccion = canal === 'TARREO' ? null : await datosDireccion(c, datos.direccion_entrega, canal==='LLAMADA');
+      let cliente=null;
+      let clienteCreado=false;
+      if(canal==='LLAMADA' && datos.cliente_nuevo) {
+        const encontrado=await buscarOCrearCliente(c,{...datos.cliente_nuevo,direccion_principal:`${direccion.calle} ${direccion.numero}`,id_comuna:direccion.id_comuna,calle_principal:direccion.calle,numero_principal:direccion.numero,referencia_principal:direccion.referencia});
+        exigirContactoRevisado(encontrado.cliente);
+        clienteCreado=encontrado.creado;
+        cliente={id_cliente:encontrado.cliente.id_cliente,nombre:encontrado.cliente.nombre,telefono:encontrado.cliente.telefono};
+      } else if(canal!=='TARREO') cliente=await datosCliente(c,canal==='WEB'?usuario.id_cliente:datos.id_cliente);
+      if(canal==='LLAMADA' && datos.guardar_como_principal) {
+        await c.execute('UPDATE Cliente SET direccion_principal=:direccion,id_comuna=:comuna,calle_principal=:calle,numero_principal=:numero,referencia_principal=:referencia WHERE id_cliente=:id',
+          {direccion:`${direccion.calle} ${direccion.numero}`,comuna:direccion.id_comuna,calle:direccion.calle,numero:direccion.numero,referencia:direccion.referencia || null,id:cliente.id_cliente});
+      }
       const idMongo = canal === 'TARREO' ? null : new ObjectId().toHexString();
       const crear = await c.execute('BEGIN PkgVentas.CrearVenta(:empleado,:canal,:cliente,:metodo,:mongo,:id); END;', {
         empleado, canal, cliente: cliente?.id_cliente || null, metodo: datos.metodo_pago || datos.metodo_cobro,
@@ -156,7 +178,7 @@ export async function crearVenta(usuario, canal, datos, claveSolicitada) {
       if (canal !== 'TARREO') {
         const ahora = new Date().toISOString();
         documento = { _id: idMongo, id_venta: idVenta, canal, cliente, direccion_entrega: direccion,
-          metodo_cobro: datos.metodo_cobro, items: snapshots, subtotal: venta.subtotal,
+          metodo_cobro: datos.metodo_cobro, items: await conImagenes(snapshots), subtotal: venta.subtotal,
           descuento: venta.descuento, total: venta.total, estado: 'RECIBIDO',
           estado_pago: venta.estado_pago, metodo_pago: null, repartidor: null,
           historial_estados: [{ estado: 'RECIBIDO', fecha: ahora, por: usuario.id_usuario }],
@@ -167,6 +189,10 @@ export async function crearVenta(usuario, canal, datos, claveSolicitada) {
           actualizado_en: carrito.actualizado_en,
         }, idVenta));
       }
+      if(canal==='LLAMADA') eventos.push(await auditar(c,'PEDIDO_TELEFONICO',usuario,{
+        id_cliente:cliente.id_cliente,id_venta:idVenta,id_pedido:idMongo,cliente_creado:clienteCreado,
+        guardar_como_principal:Boolean(datos.guardar_como_principal),id_comuna:direccion.id_comuna,
+      }));
       for (const stock of stocks) eventos.push(await auditar(c, 'CAMBIO_STOCK', usuario, { ...stock, id_venta: idVenta, motivo: canal }));
       eventos.push(await auditar(c, canal === 'TARREO' ? 'VENTA_TARREO' : 'VENTA_CREADA', usuario,
         { id_venta: idVenta, canal, items: snapshots, subtotal: venta.subtotal, descuento: venta.descuento,

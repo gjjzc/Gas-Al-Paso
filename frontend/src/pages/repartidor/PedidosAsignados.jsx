@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../../components/ImagenProducto.jsx';
 import { useState } from 'react';
 import { useConsulta } from '../../hooks/useConsulta.js';
 import { useOperacion } from '../../hooks/useOperacion.js';
@@ -133,7 +134,7 @@ export function PedidosAsignados() {
                     <ul className="resumen-items">
                       {p.items.map((i) => (
                         <li key={i.id_producto}>
-                          <span>
+                          <span className="producto-con-foto"><ImagenProducto producto={i} className="foto-mini" />
                             {i.cantidad} × {i.nombre}
                           </span>
                           <strong>{clp(i.cantidad * i.precio_unitario)}</strong>

@@ -16,6 +16,7 @@ export function useOperacion(tipo) {
   });
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState('');
+  const [errorCampos, setErrorCampos] = useState({});
   const [enviando, setEnviando] = useState(false);
   const bloqueo = useRef(false);
   async function ejecutar(datos) {
@@ -32,6 +33,7 @@ export function useOperacion(tipo) {
     bloqueo.current = true;
     setEnviando(true);
     setError('');
+    setErrorCampos({});
     setPendiente(solicitud);
     try {
       const respuesta = await api(solicitud.ruta, {
@@ -45,6 +47,7 @@ export function useOperacion(tipo) {
       return respuesta;
     } catch (e) {
       setError(e.message);
+      setErrorCampos(e.campos || {});
       if (
         e.estado >= 400 &&
         e.estado < 500 &&
@@ -64,5 +67,17 @@ export function useOperacion(tipo) {
       setError('');
     }
   }
-  return { pendiente, resultado, error, enviando, ejecutar, nueva };
+  function limpiarErrorCampo(campo) {
+    setErrorCampos((a) => ({ ...a, [campo]: '' }));
+  }
+  return {
+    limpiarErrorCampo,
+    pendiente,
+    resultado,
+    error,
+    errorCampos,
+    enviando,
+    ejecutar,
+    nueva,
+  };
 }
