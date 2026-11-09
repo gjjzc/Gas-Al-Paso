@@ -1,6 +1,7 @@
+import { claveTemporal } from './datos.js';
 import { test, expect } from '@playwright/test';
-import { telefonoPrueba } from './datos.js';
-test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para bases demo.');
+import { telefonoTemporal } from './datos.js';
+test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para bases de integración.');
 async function api(request, method, path, body, token) {
   const r = await request.fetch(`/api${path}`, {
     method,
@@ -17,13 +18,13 @@ test('pedido telefónico sin cuenta: formulario corto, repetición de teléfono 
   test.setTimeout(90000);
   await page.setViewportSize({ width: 390, height: 844 });
   const marca = Date.now();
-  const tel = telefonoPrueba();
+  const tel = telefonoTemporal();
   const nombre = `Llamada Sin Cuenta ${marca}`;
   const errores = [];
   page.on('pageerror', (e) => errores.push(e.message));
   await page.goto('/login');
-  await page.getByLabel('Correo electrónico').fill('admin@demo.gasalpaso.test');
-  await page.getByLabel('Contraseña', { exact: true }).fill('GasPasoDemo2026!');
+  await page.getByLabel('Correo electrónico').fill(process.env.TEST_ADMIN_EMAIL);
+  await page.getByLabel('Contraseña', { exact: true }).fill(process.env.TEST_ADMIN_PASSWORD);
   await page
     .getByRole('button', { name: 'Iniciar sesión', exact: true })
     .click();
@@ -37,7 +38,7 @@ test('pedido telefónico sin cuenta: formulario corto, repetición de teléfono 
     '/catalogo',
     {
       nombre: `Gas Telefono UI ${marca}`,
-      descripcion: 'Prueba telefono',
+      descripcion: 'Atención telefónica',
       categoria: 'GAS',
       peso: 11,
       precio: 15000,
@@ -89,7 +90,7 @@ test('pedido telefónico sin cuenta: formulario corto, repetición de teléfono 
       expect(r.status()).toBe(201);
       await ruta.fulfill({
         status: 503,
-        json: { mensaje: 'Respuesta interrumpida de prueba.' },
+        json: { mensaje: 'Respuesta interrumpida de integración.' },
       });
     } else await ruta.fulfill({ response: r });
   });
@@ -144,15 +145,15 @@ test('pedido telefónico sin cuenta: formulario corto, repetición de teléfono 
   const usuario = await api(request, 'POST', '/auth/registro', {
     nombre,
     telefono: tel,
-    email: `telefono-ui-${marca}@demo.test`,
-    password: 'TelefonoDemo2026!',
+    email: `telefono-ui-${marca}@operaciones.test`,
+    password: claveTemporal('control-5'),
     direccion_principal: 'Mi casa web 1',
     id_comuna: 1,
   });
   expect(usuario.usuario.id_cliente).toBe(primero.cliente.id_cliente);
   const sesion = await api(request, 'POST', '/auth/login', {
-    email: `telefono-ui-${marca}@demo.test`,
-    password: 'TelefonoDemo2026!',
+    email: `telefono-ui-${marca}@operaciones.test`,
+    password: claveTemporal('control-5'),
   });
   const mios = await api(
     request,

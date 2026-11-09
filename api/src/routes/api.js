@@ -38,7 +38,6 @@ apiRouter.patch('/usuarios/:id', autenticar, permitir('ADMIN'), usuarios.editar)
 apiRouter.get('/repartidores', autenticar, permitir('ADMIN'), usuarios.repartidores);
 apiRouter.put('/repartidores/:id/comunas', autenticar, permitir('ADMIN'), usuarios.cobertura);
 apiRouter.get('/auditoria', autenticar, permitir('ADMIN'), auditoria.listar);
-apiRouter.post('/sincronizacion/reintentar', autenticar, permitir('ADMIN'), auditoria.reintentar);
 
 // Carrito privado por cliente. El TTL se renueva solo al modificarlo.
 apiRouter.get('/carrito', autenticar, permitir('CLIENTE'), carrito.obtener);

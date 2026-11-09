@@ -34,12 +34,6 @@ export function ResultadoCuadratura({ datos }) {
           Cierre #{datos.cierre.id_cierre} · {datos.fecha}
         </span>
       </div>
-      {datos.sincronizacion === 'PENDIENTE' && (
-        <p className="aviso">
-          El cierre quedó guardado en Oracle. Su auditoría se sincronizará
-          cuando Mongo esté disponible.
-        </p>
-      )}
       {datos.cierre.desactualizado && (
         <p className="aviso aviso-error">
           Los movimientos actuales difieren del cierre guardado. Administración

@@ -116,13 +116,7 @@ export function Tarreo() {
             ))}
           </ul>
           <Totales datos={operacion.resultado} />
-          <p className="nota">Estos son los importes definitivos de Oracle.</p>
-          {operacion.resultado.sincronizacion === 'PENDIENTE' && (
-            <p className="aviso">
-              La venta está guardada. Su auditoría se sincronizará cuando Mongo
-              esté disponible.
-            </p>
-          )}
+          <p className="nota">Estos son los importes definitivos de la venta.</p>
           <div className="acciones-flex">
             <Boton
               onClick={() => {

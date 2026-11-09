@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useConsulta } from '../../hooks/useConsulta.js';
-import { useAccion } from '../../hooks/useAccion.js';
 import { fecha } from '../../services/api.js';
 import {
   Boton,
@@ -11,7 +10,7 @@ import {
   Formulario,
   Tarjeta,
 } from '../../components/UI.jsx';
-import { AvisosAccion, Paginacion } from '../../components/Admin.jsx';
+import { Paginacion } from '../../components/Admin.jsx';
 const tipos = [
   'CAMBIO_PRECIO',
   'CAMBIO_STOCK',
@@ -25,41 +24,26 @@ const tipos = [
   'VENTA_CREADA',
   'VENTA_RECHAZADA_STOCK',
   'EDICION_CATALOGO',
+  'PEDIDO_TELEFONICO',
+  'PEDIDO_ELIMINADO',
+  'CLIENTE_VINCULADO_USUARIO',
+  'CLIENTE_ACTUALIZADO',
 ];
 export function Auditoria() {
   const [filtros, setFiltros] = useState({});
   const [pagina, setPagina] = useState(0);
-  const accion = useAccion();
   const consulta = useConsulta(
     `/auditoria?${new URLSearchParams({ ...filtros, limite: 15, offset: pagina * 15 })}`,
   );
-  async function sincronizar() {
-    const r = await accion.ejecutar(
-      '/sincronizacion/reintentar',
-      'POST',
-      undefined,
-      'Reintento de sincronización ejecutado.',
-    );
-    if (r) consulta.refrescar();
-  }
   return (
     <>
       <Encabezado
         etiqueta="TRAZABILIDAD"
         titulo="Auditoría"
-        accion={
-          <Boton
-            variante="secundario"
-            disabled={accion.enviando}
-            onClick={sincronizar}
-          >
-            Reintentar sincronización
-          </Boton>
-        }
+
       >
         Cambios de precio y stock, ventas, asignaciones y cierres registrados.
       </Encabezado>
-      <AvisosAccion accion={accion} />
       <Tarjeta className="filtros-admin">
         <Formulario
           onSubmit={(e) => {

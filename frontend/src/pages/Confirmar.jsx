@@ -56,7 +56,7 @@ export function Confirmar() {
       },
     };
     try {
-      // Guardar antes de enviar: un timeout no demuestra que Oracle haya revertido.
+      // Guardar antes de enviar: un timeout no demuestra que el pedido se haya revertido.
       sessionStorage.setItem(almacenamiento, JSON.stringify(datos));
       setPendiente(datos);
     } catch {
@@ -205,7 +205,7 @@ export function Confirmar() {
           </ul>
           <Totales datos={resumen} />
           <p className="nota">
-            El total definitivo y el stock se comprueban al confirmar. El
+            El total definitivo y el stock se validan al confirmar. El
             carrito no reserva productos.
           </p>
           <Boton

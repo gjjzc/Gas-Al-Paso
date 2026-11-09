@@ -1,3 +1,4 @@
+import { claveTemporal } from './datos.js';
 import { test, expect } from '@playwright/test';
 const producto = {
   id_producto: 2,
@@ -13,7 +14,7 @@ const producto = {
 const cliente = {
   id_usuario: 901,
   id_cliente: 901,
-  nombre: 'Cliente prueba',
+  nombre: 'Valentina Soto',
   rol: 'CLIENTE',
   id_comuna: 1,
   direccion_principal: 'Calle Uno 123',
@@ -79,18 +80,18 @@ test('login inválido muestra error y registro valida confirmación', async ({
     }),
   );
   await page.goto('/login');
-  await page.getByLabel('Correo electrónico').fill('cliente@demo.test');
-  await page.getByLabel('Contraseña', { exact: true }).fill('incorrecta');
+  await page.getByLabel('Correo electrónico').fill('cliente@operaciones.test');
+  await page.getByLabel('Contraseña', { exact: true }).fill(claveTemporal('acceso-invalido'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByRole('alert')).toContainText('incorrectos');
   await page.goto('/registro');
-  await page.getByLabel('Nombre completo').fill('Cliente Prueba');
+  await page.getByLabel('Nombre completo').fill('Valentina Soto');
   await page.getByLabel('Teléfono').fill('+56912345678');
-  await page.getByLabel('Correo electrónico').fill('cliente@demo.test');
+  await page.getByLabel('Correo electrónico').fill('cliente@operaciones.test');
   await page.getByLabel('Comuna', { exact: true }).selectOption('1');
   await page.getByLabel('Dirección principal').fill('Calle Uno 123');
-  await page.getByLabel('Contraseña', { exact: true }).fill('ClaveDemo2026!');
-  await page.getByLabel('Repetir contraseña').fill('OtraClave2026!');
+  await page.getByLabel('Contraseña', { exact: true }).fill(claveTemporal('control-1'));
+  await page.getByLabel('Repetir contraseña').fill(claveTemporal('confirmacion-distinta'));
   await page.getByRole('button', { name: 'Crear mi cuenta' }).click();
   await expect(page.getByRole('alert')).toContainText('no coinciden');
 });
@@ -99,7 +100,7 @@ test('sesión vencida redirige y ADMIN no accede al carrito', async ({
 }) => {
   await publico(page);
   await page.addInitScript(() =>
-    sessionStorage.setItem('gas-al-paso.token', 'token-prueba'),
+    sessionStorage.setItem('gas-al-paso.token', 'token-control'),
   );
   await page.route('**/api/auth/me', (r) =>
     r.fulfill({ status: 401, json: { mensaje: 'Token vencido.' } }),
@@ -125,7 +126,7 @@ test('sesión vencida redirige y ADMIN no accede al carrito', async ({
 test('carrito vacío, error y recuperación', async ({ page }) => {
   await publico(page);
   await page.addInitScript(() =>
-    sessionStorage.setItem('gas-al-paso.token', 'token-prueba'),
+    sessionStorage.setItem('gas-al-paso.token', 'token-control'),
   );
   await page.route('**/api/auth/me', (r) => r.fulfill({ json: cliente }));
   await page.route('**/api/carrito', (r) =>
@@ -159,10 +160,10 @@ test('stock insuficiente conserva carrito y permite corregir antes de volver a c
     subtotal: 30000,
     descuento: 3000,
     total: 27000,
-    version: 'version-prueba',
+    version: 'version-control',
   };
   await page.addInitScript(() =>
-    sessionStorage.setItem('gas-al-paso.token', 'token-prueba'),
+    sessionStorage.setItem('gas-al-paso.token', 'token-control'),
   );
   await page.route('**/api/auth/me', (r) => r.fulfill({ json: cliente }));
   await page.route('**/api/carrito', (r) => r.fulfill({ json: carrito }));
@@ -201,7 +202,7 @@ test('carrito vencido impide confirmar y REPARTIDOR solo ve su navegación', asy
 }) => {
   await publico(page);
   await page.addInitScript(() =>
-    sessionStorage.setItem('gas-al-paso.token', 'token-prueba'),
+    sessionStorage.setItem('gas-al-paso.token', 'token-control'),
   );
   await page.route('**/api/auth/me', (r) => r.fulfill({ json: cliente }));
   await page.route('**/api/carrito', (r) => r.fulfill({ json: vacio }));

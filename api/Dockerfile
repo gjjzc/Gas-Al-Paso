@@ -1,8 +1,8 @@
-FROM node:24-bookworm-slim
+FROM node:24-alpine
 WORKDIR /app
-COPY --chown=node:node package*.json ./
-RUN --mount=type=secret,id=proxy_ca if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci --omit=dev
-COPY --chown=node:node src ./src
+# Copiar una vez y construir en una sola capa reduce el espacio usado por Docker.
+COPY --chown=node:node . .
+RUN npm ci --omit=dev && npm cache clean --force && chown -R node:node /app
 USER node
 EXPOSE 4000
 CMD ["npm", "start"]

@@ -186,12 +186,6 @@ export function Pedido() {
               </p>
               <small>Última consulta: {fecha(consulta.actualizado)}</small>
             </div>
-            {pedido.sincronizacion === 'PENDIENTE' && (
-              <p className="aviso">
-                Tu pedido está guardado. Estamos actualizando su historial en el
-                sistema.
-              </p>
-            )}
             <div className="dos-columnas">
               <div className="detalle-principal">
                 <Tarjeta>

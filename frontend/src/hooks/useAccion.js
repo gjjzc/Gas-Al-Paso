@@ -14,12 +14,7 @@ export function useAccion() {
     setAviso('');
     try {
       const r = await api(ruta, { method, body });
-      setAviso(
-        mensaje +
-          (r.sincronizacion === 'PENDIENTE'
-            ? ' Guardado en Oracle; la sincronización está pendiente.'
-            : ''),
-      );
+      setAviso(mensaje);
       return r;
     } catch (e) {
       setError(

@@ -79,8 +79,8 @@ export function Productos() {
           </Boton>
         }
       >
-        Precio y stock en Oracle, catálogo en Mongo. Cada cambio de precio o
-        stock deja auditoría.
+        Administra precios, stock y catálogo. Los cambios de precio y
+        stock quedan registrados en auditoría.
       </Encabezado>
       <AvisosAccion accion={accion} />
       <Formulario
@@ -164,7 +164,7 @@ export function Productos() {
               required
             />
             <Campo label="Imagen: ruta local" name="imagen" maxLength={250}
-              placeholder="/productos/balon-11kg.png" value={editar.imagen || ''}
+              placeholder="/productos/balon-11kg.jpg" value={editar.imagen || ''}
               onChange={e => setEditar(actual => ({ ...actual, imagen: e.target.value }))}
               ayuda="Archivo en frontend/public/productos/. Vacío usa la imagen de reemplazo." />
             <div className="vista-previa-producto">

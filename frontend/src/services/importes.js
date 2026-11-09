@@ -1,4 +1,4 @@
-// Vista previa con centavos enteros; el total definitivo siempre viene de Oracle.
+// Vista previa con centavos enteros; el total definitivo siempre viene de la API.
 export function calcularImportes(items) {
   const subtotal = items.reduce(
     (s, i) => s + Math.round(i.precio_unitario * 100) * i.cantidad,

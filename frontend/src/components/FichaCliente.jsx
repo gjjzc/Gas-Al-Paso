@@ -245,9 +245,9 @@ export function FichaCliente({ id, onNuevo }) {
             <Tarjeta className="seccion-admin">
               <h3>Historial reciente</h3>
               <p className="nota">
-                Últimos 10 pedidos registrados en Mongo. El contador incluye los
+                Últimos 10 pedidos registrados. El contador incluye los
                 pedidos guardados, también cancelados; los eliminados no se
-                cuentan. Si hay sincronización pendiente, actualiza después.
+                cuentan.
               </p>
               {c.pedidos_recientes.length ? (
                 <Tabla

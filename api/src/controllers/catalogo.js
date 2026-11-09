@@ -2,8 +2,8 @@ import { imagenLocal, rutaImagen } from '../services/imagenes.js';
 import { campos, texto, entero, booleano, exigir, idRuta, paginacion } from '../middlewares/validar.js';
 import * as servicio from '../services/catalogo.js';
 
-function validar(cuerpo, alta = false, soloOracle = false) {
-  const permitidos = soloOracle ? ['precio', 'stock', 'activo']
+function validar(cuerpo, alta = false, soloInventario = false) {
+  const permitidos = soloInventario ? ['precio', 'stock', 'activo']
     : ['nombre', 'descripcion', 'categoria', 'peso', 'precio', 'stock', 'activo', 'imagen', 'atributos', 'destacado'];
   campos(cuerpo, permitidos, alta ? ['nombre', 'descripcion', 'categoria', 'peso', 'precio', 'stock'] : []);
   exigir(Object.keys(cuerpo).length > 0, 'Debes indicar al menos un campo.');
@@ -43,4 +43,4 @@ export async function obtener(req, res) { res.json(await servicio.obtener(idRuta
 export async function crear(req, res) { res.status(201).json(await servicio.crear(validar(req.body, true), req.usuario)); }
 export async function editar(req, res) { res.json(await servicio.editar(idRuta(req.params.id), validar(req.body), req.usuario)); }
 export async function eliminar(req, res) { res.json(await servicio.eliminar(idRuta(req.params.id), req.usuario)); }
-export async function producto(req, res) { res.json(await servicio.editar(idRuta(req.params.id), validar(req.body, false, true), req.usuario, true)); }
+export async function producto(req, res) { res.json(await servicio.editar(idRuta(req.params.id), validar(req.body, false, true), req.usuario)); }

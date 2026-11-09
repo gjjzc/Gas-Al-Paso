@@ -1,8 +1,9 @@
-import { telefonoPrueba } from './datos.js';
+import { claveTemporal } from './datos.js';
+import { telefonoTemporal } from './datos.js';
 import { test, expect } from '@playwright/test';
 test.skip(
   !process.env.E2E_REAL,
-  'Activar E2E_REAL=1 para probar contra Oracle y Mongo de desarrollo.',
+  'Activar E2E_REAL=1 para probar contra Mongo y Redis de desarrollo.',
 );
 async function pedir(request, method, ruta, body, token) {
   const respuesta = await request.fetch(`/api${ruta}`, {
@@ -24,8 +25,8 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
   const errores = [];
   page.on('pageerror', (e) => errores.push(e.message));
   const admin = await pedir(request, 'POST', '/auth/login', {
-    email: 'admin@demo.gasalpaso.test',
-    password: 'GasPasoDemo2026!',
+    email: process.env.TEST_ADMIN_EMAIL,
+    password: process.env.TEST_ADMIN_PASSWORD,
   });
   const rep = await pedir(
     request,
@@ -33,8 +34,8 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
     '/usuarios',
     {
       nombre: `Repartidor UI ${marca}`,
-      email: `rep-ui-${marca}@demo.test`,
-      password: 'ClaveDemo2026!',
+      email: `rep-ui-${marca}@operaciones.test`,
+      password: claveTemporal('control-1'),
       rol: 'REPARTIDOR',
       comunas: [1],
     },
@@ -42,16 +43,16 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
   );
   const loginRep = await pedir(request, 'POST', '/auth/login', {
     email: rep.email,
-    password: 'ClaveDemo2026!',
+    password: claveTemporal('control-1'),
   });
-  // Producto propio evita depender de stock agotado por pruebas anteriores.
+  // Producto propio evita depender de stock agotado por verificaciones anteriores.
   const producto = await pedir(
     request,
     'POST',
     '/catalogo',
     {
       nombre: `Gas UI ${marca}`,
-      descripcion: 'Balón de prueba de interfaz',
+      descripcion: 'Balón de integración de interfaz',
       categoria: 'GAS',
       peso: 11,
       precio: 15000,
@@ -61,24 +62,24 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
   );
   await page.goto('/registro');
   await page.getByLabel('Nombre completo').fill(`Cliente UI ${marca}`);
-  await page.getByLabel('Teléfono').fill(telefonoPrueba());
+  await page.getByLabel('Teléfono').fill(telefonoTemporal());
   await page
     .getByLabel('Correo electrónico')
-    .fill(`cliente-ui-${marca}@demo.test`);
+    .fill(`cliente-ui-${marca}@operaciones.test`);
   await page.getByLabel('Comuna', { exact: true }).selectOption('1');
-  await page.getByLabel('Dirección principal').fill('Calle Prueba 123');
-  await page.getByLabel('Contraseña', { exact: true }).fill('ClaveDemo2026!');
-  await page.getByLabel('Repetir contraseña').fill('ClaveDemo2026!');
+  await page.getByLabel('Dirección principal').fill('Calle Los Aromos 123');
+  await page.getByLabel('Contraseña', { exact: true }).fill(claveTemporal('control-1'));
+  await page.getByLabel('Repetir contraseña').fill(claveTemporal('control-1'));
   await page.getByRole('button', { name: 'Crear mi cuenta' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('status')).toContainText('Tu cuenta está lista');
   await page
     .getByLabel('Correo electrónico')
-    .fill(`cliente-ui-${marca}@demo.test`);
-  await page.getByLabel('Contraseña', { exact: true }).fill('ClaveDemo2026!');
+    .fill(`cliente-ui-${marca}@operaciones.test`);
+  await page.getByLabel('Contraseña', { exact: true }).fill(claveTemporal('control-1'));
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page).toHaveURL(/\/catalogo$/);
-  // Paginar hasta el producto de prueba (las suites preservan datos previos).
+  // Paginar hasta el producto de integración (las suites preservan datos previos).
   for (
     let i = 0;
     i < 50 &&
@@ -114,11 +115,11 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
   await page.reload();
   await expect(page.locator('.totales .total dd')).toHaveText('$27.000');
   await page.getByRole('link', { name: 'Continuar con el pedido' }).click();
-  await page.getByLabel('Calle', { exact: true }).fill('Calle Prueba');
+  await page.getByLabel('Calle', { exact: true }).fill('Los Robles');
   await page.getByLabel('Número', { exact: true }).fill('123');
   await page.getByLabel('Comuna de entrega').selectOption('1');
   await page.getByLabel('Referencia (opcional)').fill('Portón azul');
-  // Oracle confirma, pero simulamos perder la respuesta. El reintento debe usar la misma clave.
+  // La API confirma, pero simulamos perder la respuesta. El reintento debe usar la misma clave.
   const claves = [];
   let primera = true;
   await page.route('**/api/pedidos', async (ruta) => {
@@ -130,7 +131,7 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
       expect(respuesta.status()).toBe(201);
       await ruta.fulfill({
         status: 503,
-        json: { mensaje: 'Respuesta interrumpida en prueba.' },
+        json: { mensaje: 'Respuesta interrumpida durante la operación.' },
       });
     } else {
       expect(respuesta.status()).toBe(200);

@@ -22,7 +22,7 @@ export function OperacionPendiente({ operacion, reintentar }) {
     <Tarjeta className="operacion-pendiente">
       <h2>Solicitud pendiente de respuesta</h2>
       <p>
-        Podría haberse guardado. Comprueba el resultado reintentando la misma
+        Podría haberse guardado. Verifica el resultado reintentando la misma
         solicitud; no se duplicará.
       </p>
       {operacion.pendiente.vista?.titulo && (

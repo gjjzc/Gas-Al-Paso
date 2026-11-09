@@ -217,11 +217,6 @@ export function PedidoAdmin() {
                 </ul>
                 <Totales datos={p} />
                 <p className="nota">Pago: {p.estado_pago}</p>
-                {p.sincronizacion === 'PENDIENTE' && (
-                  <p className="aviso">
-                    Guardado en Oracle; sincronización pendiente.
-                  </p>
-                )}
               </Tarjeta>
             </div>
             {modal === 'asignar' && (
@@ -325,7 +320,7 @@ export function PedidoAdmin() {
                 <p>
                   {modal === 'cancelar'
                     ? 'Se anulará la venta y se repondrá el stock.'
-                    : 'Se eliminará el documento del pedido; se conserva la venta anulada y su auditoría.'}
+                    : 'Se eliminará el pedido cancelado; se conserva una copia resumida en auditoría.'}
                 </p>
               </Confirmacion>
             )}
