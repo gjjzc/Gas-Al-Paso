@@ -1,6 +1,7 @@
-import { telefonoPrueba } from './datos.js';
+import { claveTemporal } from './datos.js';
+import { telefonoTemporal } from './datos.js';
 import { test, expect } from '@playwright/test';
-test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para usar bases demo.');
+test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para usar bases de integración.');
 async function pedir(request, method, ruta, body, token, estado) {
   const r = await request.fetch(`/api${ruta}`, {
     method,
@@ -14,17 +15,17 @@ async function pedir(request, method, ruta, body, token, estado) {
 async function preparar(request, sufijo) {
   const marca = `${Date.now()}-${sufijo}`;
   const admin = await pedir(request, 'POST', '/auth/login', {
-    email: 'admin@demo.gasalpaso.test',
-    password: 'GasPasoDemo2026!',
+    email: process.env.TEST_ADMIN_EMAIL,
+    password: process.env.TEST_ADMIN_PASSWORD,
   });
-  const clave = 'JornadaDemo2026!';
+  const clave = claveTemporal('control-3');
   const rep = await pedir(
     request,
     'POST',
     '/usuarios',
     {
       nombre: `Rep jornada ${marca}`,
-      email: `jornada-${marca}@demo.test`,
+      email: `jornada-${marca}@operaciones.test`,
       password: clave,
       rol: 'REPARTIDOR',
       comunas: [1],
@@ -41,7 +42,7 @@ async function preparar(request, sufijo) {
     '/catalogo',
     {
       nombre: `Gas Jornada ${marca}`,
-      descripcion: 'Balón de prueba móvil',
+      descripcion: 'Balón de integración móvil',
       categoria: 'GAS',
       peso: 11,
       precio: 15000,
@@ -84,15 +85,15 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
   page.on('pageerror', (e) => errores.push(e.message));
   const d = await preparar(request, 'completa');
   await pedir(request, 'POST', '/auth/registro', {
-    email: `cliente-${d.marca}@demo.test`,
+    email: `cliente-${d.marca}@operaciones.test`,
     password: d.clave,
     nombre: 'Cliente Jornada',
-    telefono: telefonoPrueba(),
+    telefono: telefonoTemporal(),
     direccion_principal: 'Calle Jornada 123',
     id_comuna: 1,
   });
   const cliente = await pedir(request, 'POST', '/auth/login', {
-    email: `cliente-${d.marca}@demo.test`,
+    email: `cliente-${d.marca}@operaciones.test`,
     password: d.clave,
   });
   await pedir(
@@ -111,7 +112,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
         calle: 'Calle Jornada',
         numero: '123',
         id_comuna: 1,
-        referencia: 'Portón de prueba',
+        referencia: 'Portón de integración',
       },
       metodo_cobro: 'EFECTIVO',
     },
@@ -133,7 +134,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
   await expect(
     tarjeta.getByText('Calle Jornada 123', { exact: true }),
   ).toBeVisible();
-  await expect(tarjeta.getByText('Portón de prueba')).toBeVisible();
+  await expect(tarjeta.getByText('Portón de integración')).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath('pedidos-movil.png'),
     fullPage: true,
@@ -218,7 +219,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
       expect(r.status()).toBe(201);
       await ruta.fulfill({
         status: 503,
-        json: { mensaje: 'Respuesta de venta perdida en prueba.' },
+        json: { mensaje: 'Respuesta de venta perdida durante la operación.' },
       });
     } else {
       expect(r.status()).toBe(200);
@@ -274,7 +275,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
       expect(r.status()).toBe(201);
       await ruta.fulfill({
         status: 503,
-        json: { mensaje: 'Respuesta de cierre perdida en prueba.' },
+        json: { mensaje: 'Respuesta de cierre perdida durante la operación.' },
       });
     } else {
       expect(r.status()).toBe(200);
@@ -359,7 +360,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
     '/usuarios',
     {
       nombre: 'Rep aislado',
-      email: `otro-${d.marca}@demo.test`,
+      email: `otro-${d.marca}@operaciones.test`,
       password: d.clave,
       rol: 'REPARTIDOR',
       comunas: [1],

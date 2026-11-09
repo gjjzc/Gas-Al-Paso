@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { telefonoPrueba } from './datos.js';
-test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para bases demo.');
+import { telefonoTemporal } from './datos.js';
+test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para bases de integración.');
 async function api(request, method, path, body, token) {
   const r = await request.fetch(`/api${path}`, {
     method,
@@ -28,11 +28,11 @@ test('ultimos 4 digitos, ficha, correccion, historial y pedido precargado editab
   const errores = [];
   page.on('pageerror', (e) => errores.push(e.message));
   const marca = Date.now();
-  const tel = telefonoPrueba();
+  const tel = telefonoTemporal();
   const nombre = `Ficha Cliente ${marca}`;
   const admin = await api(request, 'POST', '/auth/login', {
-    email: 'admin@demo.gasalpaso.test',
-    password: 'GasPasoDemo2026!',
+    email: process.env.TEST_ADMIN_EMAIL,
+    password: process.env.TEST_ADMIN_PASSWORD,
   });
   const token = admin.token;
   const p = await api(
@@ -41,7 +41,7 @@ test('ultimos 4 digitos, ficha, correccion, historial y pedido precargado editab
     '/catalogo',
     {
       nombre: `Gas Ficha ${marca}`,
-      descripcion: 'Prueba ficha',
+      descripcion: 'Atención al cliente',
       peso: 11,
       categoria: 'GAS',
       precio: 15000,
@@ -82,8 +82,8 @@ test('ultimos 4 digitos, ficha, correccion, historial y pedido precargado editab
     token,
   );
   await page.goto('/login');
-  await page.getByLabel('Correo electrónico').fill('admin@demo.gasalpaso.test');
-  await page.getByLabel('Contraseña', { exact: true }).fill('GasPasoDemo2026!');
+  await page.getByLabel('Correo electrónico').fill(process.env.TEST_ADMIN_EMAIL);
+  await page.getByLabel('Contraseña', { exact: true }).fill(process.env.TEST_ADMIN_PASSWORD);
   await page
     .getByRole('button', { name: 'Iniciar sesión', exact: true })
     .click();

@@ -1,246 +1,128 @@
-import { conImagenes } from './imagenes.js';
-import { createHash, randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
-import oracledb from 'oracledb';
-import { mongoDb, conectarMongo } from '../config/databases.js';
-import { transaccion, conConexion, consultar, salidaNumero } from './oracle.js';
-import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
-import { bloquearCliente, leerCarrito, versionCarrito } from './carrito.js';
+import { randomUUID } from 'node:crypto';
+import { mongoDb } from '../config/databases.js';
+import { siguienteId } from './contadores.js';
+import { auditar } from './auditoria.js';
+import { transaccion } from './transacciones.js';
+import { idempotente } from './idempotencia.js';
+import { conCarritoBloqueado, leerCarrito, limpiarConsumido } from './carrito.js';
+import { resolverDireccion, buscarOCrearCliente, principal } from './clientes.js';
+import { asegurarDiaAbierto, fechaActual, rangoDia } from './jornada.js';
+import { repartidorActivo } from './empleados.js';
+import { pedidoPublico, ventaPublica } from './documentos.js';
+import { calcular, sumar } from './importes.js';
+import { imagenLocal } from './imagenes.js';
 import { exigir } from '../middlewares/validar.js';
-import { errorCampo } from '../middlewares/validar-cliente.js';
 import { ErrorHttp } from '../middlewares/errores.js';
-import { lineas } from '../middlewares/validar-ventas.js';
-import { buscarOCrearCliente, validarComuna, exigirContactoRevisado } from './clientes.js';
-import { asegurarDiaAbierto } from './jornada.js';
 
-function huella(valor) {
-  return createHash('sha256').update(JSON.stringify(valor)).digest('hex');
-}
-export async function leerVenta(c, id) {
-  const [venta] = await consultar(c, `SELECT v.id_venta,v.fecha_venta,v.canal,v.id_cliente,v.id_empleado,
-    e.nombre repartidor_nombre,v.estado_pago,v.metodo_pago,v.fecha_cobro,v.subtotal,v.descuento,v.total_venta total,v.id_pedido_mongo
-    FROM Venta v JOIN Empleado e ON e.id_empleado=v.id_empleado WHERE v.id_venta=:id`, { id });
-  exigir(venta, 'Venta no encontrada.', 404);
-  venta.items = await consultar(c, `SELECT d.id_producto,p.nombre,d.cantidad,d.precio_unitario,d.subtotal,d.descuento,d.total_venta total
-    FROM Detalle_venta d JOIN Productos p ON p.id_producto=d.id_producto WHERE d.id_venta=:id ORDER BY d.id_producto`, { id });
-  return venta;
-}
-export async function leerPedido(c, idVenta) {
-  const [evento] = await consultar(c, `SELECT tipo,payload FROM Pendiente_Mongo
-    WHERE id_venta=:id AND tipo IN ('PEDIDO_GUARDAR','PEDIDO_ELIMINAR')
-    ORDER BY id_evento DESC FETCH NEXT 1 ROWS ONLY`, { id: idVenta }, { fetchInfo: { PAYLOAD: { type: oracledb.STRING } } });
-  if (evento) {
-    exigir(evento.tipo !== 'PEDIDO_ELIMINAR', 'Pedido no encontrado.', 404);
-    return JSON.parse(evento.payload);
-  }
-  // Las fixtures de FASE 1 son previas a la cola de pedidos.
-  const [venta] = await consultar(c, 'SELECT id_pedido_mongo FROM Venta WHERE id_venta=:id', { id: idVenta });
-  if (venta?.id_pedido_mongo) await conectarMongo();
-  const doc = venta?.id_pedido_mongo && await mongoDb.collection('pedidos').findOne({ _id: new ObjectId(venta.id_pedido_mongo) });
-  exigir(doc, 'Pedido no encontrado.', 404);
-  return { ...doc, _id: doc._id.toHexString(), version: doc.version || 1 };
-}
-async function solicitud(c, usuario, clave, hash, canal) {
-  const [actual] = await consultar(c, 'SELECT id_venta,huella,canal FROM Solicitud_Venta WHERE id_usuario=:usuario AND clave=:clave',
-    { usuario: usuario.id_usuario, clave });
-  if (actual) {
-    exigir(actual.huella === hash && actual.canal === canal, 'Idempotency-Key ya se uso con otros datos.', 409);
-    exigir(actual.id_venta, 'La solicitud sigue en proceso. Reintenta con la misma clave.', 409);
-  }
-  return actual;
-}
-async function resultadoRepetido(c, actual, clave) {
-  const venta = await leerVenta(c, actual.id_venta);
-  let documento = venta;
-  if (venta.canal !== 'TARREO') {
-    try { documento = await leerPedido(c, venta.id_venta); }
-    catch (error) {
-      if (error.estado === 404) throw new ErrorHttp(409, 'Esta solicitud ya creo una venta cuyo pedido fue eliminado. Usa otra clave para una venta nueva.');
-      throw error;
-    }
-  }
-  const eventos = await consultar(c, 'SELECT id_evento FROM Pendiente_Mongo WHERE id_venta=:id', { id: venta.id_venta });
-  return { documento, eventos: eventos.map(e => e.id_evento), clave, reutilizada: true };
-}
-async function datosCliente(c, id) {
-  const [cliente] = await consultar(c, 'SELECT id_cliente,nombre,telefono FROM Cliente WHERE id_cliente=:id', { id });
-  exigir(cliente, 'Cliente no encontrado.', 404);
-  return cliente;
-}
-async function datosDireccion(c, datos, telefonico=false) {
-  let comuna;
-  if(datos.nombre_comuna) {
-    [comuna]=await consultar(c,'SELECT id_comuna,nombre FROM Comuna WHERE LOWER(nombre)=LOWER(:nombre)',{nombre:datos.nombre_comuna});
-    if(!comuna)errorCampo('comuna','Selecciona una comuna existente.');
-  } else if(telefonico) comuna=await validarComuna(c,datos.id_comuna);
-  else {
-    [comuna]=await consultar(c,'SELECT id_comuna,nombre FROM Comuna WHERE id_comuna=:id',{id:datos.id_comuna});
-    exigir(comuna,'Comuna no encontrada.',404);
-  }
-  const {nombre_comuna,...resto}=datos;
-  return { ...resto, id_comuna:comuna.id_comuna, comuna: comuna.nombre };
-}
-async function auditarRechazo(usuario, canal, error) {
-  const id = await transaccion(c => auditar(c, 'VENTA_RECHAZADA_STOCK', usuario, { canal, ...error.stock }));
-  await estadoSincronizacion([id]);
-}
+async function salida(p, session) { return p.canal === 'TARREO' ? ventaPublica(p, session) : pedidoPublico(p); }
 export async function crearVenta(usuario, canal, datos, claveSolicitada) {
-  const hash = huella({ canal, ...datos });
-  let resultado;
-  try {
-    resultado = await transaccion(async c => {
-      if (canal === 'WEB') await bloquearCliente(c, usuario.id_cliente);
-      if (claveSolicitada) {
-        const actual = await solicitud(c, usuario, claveSolicitada, hash, canal);
-        if (actual) return resultadoRepetido(c, actual, claveSolicitada);
-      }
-      let carrito;
-      let carritoVersion = null;
-      let items = datos.items;
-      let clave = claveSolicitada;
-      if (canal === 'WEB') {
-        carrito = await leerCarrito(usuario.id_cliente);
-        exigir(carrito?.items?.length, 'Tu carrito esta vacio o vencido.', 409);
-        items = lineas(carrito.items.map(({ id_producto, cantidad }) => ({ id_producto, cantidad })));
-        carritoVersion = versionCarrito(carrito);
-        clave ||= `carrito:${carritoVersion}`;
-      }
-      clave ||= randomUUID();
-      const actual = await solicitud(c, usuario, clave, hash, canal);
-      if (actual) return resultadoRepetido(c, actual, clave);
-      if (carritoVersion) {
-        const [consumida] = await consultar(c, 'SELECT id_venta FROM Solicitud_Venta WHERE carrito_version=:version', { version: carritoVersion });
-        exigir(!consumida, 'Esta version del carrito ya fue confirmada. Consulta tus pedidos o reintenta con su clave original.', 409);
-      }
-      try {
-        await c.execute(`INSERT INTO Solicitud_Venta(id_usuario,clave,huella,canal,carrito_version)
-          VALUES(:usuario,:clave,:hash,:canal,:version)`, { usuario: usuario.id_usuario, clave, hash, canal, version: carritoVersion });
-      } catch (error) {
-        if (error.errorNum === 1) error.solicitudRepetida = { clave, hash, canal };
-        throw error;
-      }
-      let empleado = usuario.id_empleado;
-      if (canal === 'WEB') {
-        const [admin] = await consultar(c, "SELECT id_empleado FROM Usuario WHERE rol='ADMIN' AND activo=1 ORDER BY id_usuario FETCH NEXT 1 ROWS ONLY");
-        exigir(admin, 'No hay un administrador activo para recibir el pedido.', 409);
-        empleado = admin.id_empleado;
-      }
-      if (canal === 'TARREO') await asegurarDiaAbierto(c, empleado);
-      const direccion = canal === 'TARREO' ? null : await datosDireccion(c, datos.direccion_entrega, canal==='LLAMADA');
-      let cliente=null;
-      let clienteCreado=false;
-      if(canal==='LLAMADA' && datos.cliente_nuevo) {
-        const encontrado=await buscarOCrearCliente(c,{...datos.cliente_nuevo,direccion_principal:`${direccion.calle} ${direccion.numero}`,id_comuna:direccion.id_comuna,calle_principal:direccion.calle,numero_principal:direccion.numero,referencia_principal:direccion.referencia});
-        exigirContactoRevisado(encontrado.cliente);
-        clienteCreado=encontrado.creado;
-        cliente={id_cliente:encontrado.cliente.id_cliente,nombre:encontrado.cliente.nombre,telefono:encontrado.cliente.telefono};
-      } else if(canal!=='TARREO') cliente=await datosCliente(c,canal==='WEB'?usuario.id_cliente:datos.id_cliente);
-      if(canal==='LLAMADA' && datos.guardar_como_principal) {
-        await c.execute('UPDATE Cliente SET direccion_principal=:direccion,id_comuna=:comuna,calle_principal=:calle,numero_principal=:numero,referencia_principal=:referencia WHERE id_cliente=:id',
-          {direccion:`${direccion.calle} ${direccion.numero}`,comuna:direccion.id_comuna,calle:direccion.calle,numero:direccion.numero,referencia:direccion.referencia || null,id:cliente.id_cliente});
-      }
-      const idMongo = canal === 'TARREO' ? null : new ObjectId().toHexString();
-      const crear = await c.execute('BEGIN PkgVentas.CrearVenta(:empleado,:canal,:cliente,:metodo,:mongo,:id); END;', {
-        empleado, canal, cliente: cliente?.id_cliente || null, metodo: datos.metodo_pago || datos.metodo_cobro,
-        mongo: idMongo, id: salidaNumero(),
-      });
-      const idVenta = crear.outBinds.id;
-      const snapshots = [];
-      const stocks = [];
-      let subtotal = 0;
-      // Orden estable de bloqueos para reducir interbloqueos entre ventas concurrentes.
-      for (const item of items) {
-        const [producto] = await consultar(c, 'SELECT nombre,valor_unitario,stock,activo FROM Productos WHERE id_producto=:id FOR UPDATE', { id: item.id_producto });
-        exigir(producto, `Producto ${item.id_producto} no encontrado.`, 404);
-        exigir(producto.activo === 1, `El producto ${producto.nombre} esta inactivo.`, 409);
-        subtotal += producto.valor_unitario*item.cantidad;
-        exigir(subtotal <= 9999999999, 'El importe de la venta supera el limite permitido.');
-        try {
-          await c.execute('BEGIN PkgVentas.AgregarItem(:venta,:producto,:cantidad); END;',
-            { venta: idVenta, producto: item.id_producto, cantidad: item.cantidad });
-        } catch (error) {
-          if (error.errorNum === 20003) {
-            const rechazo = new ErrorHttp(409, `Stock insuficiente para ${producto.nombre}. Disponible: ${producto.stock}; solicitado: ${item.cantidad}.`);
-            rechazo.stock = { id_producto: item.id_producto, disponible: producto.stock, solicitado: item.cantidad };
-            throw rechazo;
-          }
-          throw error;
+  const ejecutar = async () => {
+    // Un reintento con clave explícita puede recuperar el pedido aun con el carrito vacío.
+    const snapshot = canal === 'WEB' ? await leerCarrito(usuario.id_cliente) : null;
+    const clave = claveSolicitada || (snapshot ? `carrito:${snapshot.version}` : randomUUID());
+    try {
+      const r = await idempotente(`ventas:${usuario.id_usuario}`, clave, { canal, ...datos }, async session => {
+        let items = datos.items;
+        if (canal === 'WEB') {
+          exigir(snapshot?.items.length, 'Tu carrito esta vacio o vencido.', 409);
+          exigir(!await mongoDb.collection('idempotencia').findOne({ alcance: 'carrito', clave: snapshot.version }, { session }),
+            'Esta version del carrito ya fue confirmada. Consulta tus pedidos o reintenta con su clave original.', 409);
+          items = snapshot.items;
         }
-        snapshots.push({ ...item, nombre: producto.nombre, precio_unitario: producto.valor_unitario });
-        stocks.push({ id_producto: item.id_producto, antes: producto.stock, despues: producto.stock-item.cantidad });
-      }
-      await c.execute('BEGIN PkgVentas.FinalizarVenta(:id); END;', { id: idVenta });
-      await c.execute('UPDATE Solicitud_Venta SET id_venta=:venta WHERE id_usuario=:usuario AND clave=:clave',
-        { venta: idVenta, usuario: usuario.id_usuario, clave });
-      const venta = await leerVenta(c, idVenta);
-      const eventos = [];
-      let documento = venta;
-      if (canal !== 'TARREO') {
-        const ahora = new Date().toISOString();
-        documento = { _id: idMongo, id_venta: idVenta, canal, cliente, direccion_entrega: direccion,
-          metodo_cobro: datos.metodo_cobro, items: await conImagenes(snapshots), subtotal: venta.subtotal,
-          descuento: venta.descuento, total: venta.total, estado: 'RECIBIDO',
-          estado_pago: venta.estado_pago, metodo_pago: null, repartidor: null,
-          historial_estados: [{ estado: 'RECIBIDO', fecha: ahora, por: usuario.id_usuario }],
-          creado_en: venta.fecha_venta.toISOString(), version: 1 };
-        eventos.push(await encolar(c, 'PEDIDO_GUARDAR', documento, idVenta));
-        if (carrito) eventos.push(await encolar(c, 'CARRITO_LIMPIAR', {
-          id_cliente: usuario.id_cliente, version: carrito.version || null,
-          actualizado_en: carrito.actualizado_en,
-        }, idVenta));
-      }
-      if(canal==='LLAMADA') eventos.push(await auditar(c,'PEDIDO_TELEFONICO',usuario,{
-        id_cliente:cliente.id_cliente,id_venta:idVenta,id_pedido:idMongo,cliente_creado:clienteCreado,
-        guardar_como_principal:Boolean(datos.guardar_como_principal),id_comuna:direccion.id_comuna,
-      }));
-      for (const stock of stocks) eventos.push(await auditar(c, 'CAMBIO_STOCK', usuario, { ...stock, id_venta: idVenta, motivo: canal }));
-      eventos.push(await auditar(c, canal === 'TARREO' ? 'VENTA_TARREO' : 'VENTA_CREADA', usuario,
-        { id_venta: idVenta, canal, items: snapshots, subtotal: venta.subtotal, descuento: venta.descuento,
-          total: venta.total, estado_pago: venta.estado_pago, metodo_pago: venta.metodo_pago, id_empleado: venta.id_empleado }));
-      return { documento, eventos, clave, reutilizada: false };
-    });
-  } catch (error) {
-    if (error.solicitudRepetida) {
-      const { clave, hash: h, canal: ca } = error.solicitudRepetida;
-      resultado = await conConexion(async c => {
-        const actual = await solicitud(c, usuario, clave, h, ca);
-        exigir(actual, 'La solicitud concurrente no se completo; reintenta con la misma clave.', 409);
-        return resultadoRepetido(c, actual, clave);
+        let id_empleado = usuario.id_empleado;
+        if (canal === 'WEB') {
+          const admin = await mongoDb.collection('usuarios').findOne({ rol: 'ADMIN', activo: true }, { sort: { id_usuario: 1 }, session });
+          exigir(admin, 'No hay un administrador activo para recibir el pedido.', 409);
+          id_empleado = admin.id_empleado;
+        }
+        let repartidor = null;
+        if (canal === 'TARREO') {
+          await asegurarDiaAbierto(session, id_empleado);
+          repartidor = await repartidorActivo(session, id_empleado);
+        }
+        const direccion = canal === 'TARREO' ? null : await resolverDireccion(session, datos.direccion_entrega, canal === 'WEB' ? 404 : 400);
+        let cliente = null, clienteCreado = false;
+        if (canal !== 'TARREO') {
+          let c;
+          if (datos.cliente_nuevo) {
+            const r = await buscarOCrearCliente(session, { ...datos.cliente_nuevo, principal: principal(direccion) });
+            c = r.cliente; clienteCreado = r.creado;
+          } else c = await mongoDb.collection('clientes').findOne({ id_cliente: canal === 'WEB' ? usuario.id_cliente : datos.id_cliente }, { session });
+          exigir(c, 'Cliente no encontrado.', 404);
+          cliente = { id_cliente: c.id_cliente, nombre: c.nombre, telefono: c.telefono };
+          if (datos.guardar_como_principal) await mongoDb.collection('clientes').updateOne({ _id: c._id }, { $set: { direccion_principal: principal(direccion) }, $inc: { version: 1 } }, { session });
+        }
+        const ahora = new Date();
+        const id_venta = await siguienteId('id_venta', session);
+        const lineas = [];
+        for (const i of [...items].sort((a, b) => a.id_producto - b.id_producto)) {
+          const p = await mongoDb.collection('catalogo').findOneAndUpdate({ id_producto: i.id_producto, activo: true, stock: { $gte: i.cantidad } },
+            { $inc: { stock: -i.cantidad }, $set: { actualizado_en: ahora } }, { session, returnDocument: 'before' });
+          if (!p) {
+            const actual = await mongoDb.collection('catalogo').findOne({ id_producto: i.id_producto }, { session });
+            exigir(actual, `Producto ${i.id_producto} no encontrado.`, 404);
+            exigir(actual.activo, `El producto ${actual.nombre} esta inactivo.`, 409);
+            const e = new ErrorHttp(409, `Stock insuficiente para ${actual.nombre}. Disponible: ${actual.stock}; solicitado: ${i.cantidad}.`);
+            e.stock = { id_producto: actual.id_producto, disponible: actual.stock, solicitado: i.cantidad }; throw e;
+          }
+          lineas.push({ id_producto: p.id_producto, nombre: p.nombre, cantidad: i.cantidad, precio_unitario: p.precio, imagen: imagenLocal(p.imagen) });
+          await auditar(session, 'CAMBIO_STOCK', usuario, { id_producto: p.id_producto, antes: p.stock, despues: p.stock - i.cantidad, id_venta, motivo: canal });
+        }
+        const totales = calcular(lineas);
+        const cobrada = canal === 'TARREO';
+        const p = { _id: new ObjectId(), id_venta, canal, cliente, direccion_entrega: direccion, id_empleado,
+          items: totales.lineas, subtotal: totales.subtotal, descuento: totales.descuento, total: totales.total,
+          estado: cobrada ? 'ENTREGADO' : 'RECIBIDO', estado_pago: cobrada ? 'COBRADA' : 'PENDIENTE',
+          metodo_pago: cobrada ? datos.metodo_pago : null, metodo_cobro: datos.metodo_pago || datos.metodo_cobro,
+          repartidor, historial_estados: [{ estado: cobrada ? 'ENTREGADO' : 'RECIBIDO', fecha: ahora, por: usuario.id_usuario }],
+          creado_en: ahora, fecha_cobro: cobrada ? ahora : null, version: 1 };
+        await mongoDb.collection('pedidos').insertOne(p, { session });
+        if (canal === 'WEB') await mongoDb.collection('idempotencia').insertOne({ alcance: 'carrito', clave: snapshot.version,
+          resultado: { id_venta }, creado_en: ahora }, { session });
+        if (canal === 'LLAMADA') await auditar(session, 'PEDIDO_TELEFONICO', usuario, {
+          id_cliente: cliente.id_cliente, id_venta, id_pedido: p._id.toHexString(), cliente_creado: clienteCreado,
+          guardar_como_principal: Boolean(datos.guardar_como_principal), id_comuna: direccion.id_comuna,
+        });
+        await auditar(session, cobrada ? 'VENTA_TARREO' : 'VENTA_CREADA', usuario, {
+          id_venta, canal, items: lineas, subtotal: p.subtotal, descuento: p.descuento, total: p.total,
+          estado_pago: p.estado_pago, metodo_pago: p.metodo_pago, id_empleado,
+        });
+        return salida(p, session);
+      }, async (anterior, session) => {
+        const p = await mongoDb.collection('pedidos').findOne({ id_venta: anterior.id_venta }, { session });
+        exigir(p, 'Esta solicitud ya creo una venta cuyo pedido fue eliminado. Usa otra clave para una venta nueva.', 409);
+        return salida(p, session);
       });
-    } else {
-      if (error.stock) await auditarRechazo(usuario, canal, error);
+      // Redis no participa en la transacción financiera. Solo borrar la versión consumida.
+      // Si está caído, el registro de consumo impide confirmar de nuevo esa versión.
+      if (snapshot && !r.reutilizada) await limpiarConsumido(usuario.id_cliente, snapshot).catch(() => {});
+      return r;
+    } catch (error) {
+      if (error.stock) await transaccion(session => auditar(session, 'VENTA_RECHAZADA_STOCK', usuario, { canal, ...error.stock })).catch(() => {});
       throw error;
     }
-  }
-  return { ...resultado.documento, clave_idempotencia: resultado.clave, reutilizada: resultado.reutilizada,
-    sincronizacion: await estadoSincronizacion(resultado.eventos) };
+  };
+  return canal === 'WEB' ? conCarritoBloqueado(usuario.id_cliente, ejecutar) : ejecutar();
 }
-
 export async function ventasDia(usuario, filtros) {
-  return conConexion(async c => {
-    const [hoy] = await consultar(c, "SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD') fecha FROM DUAL");
-    const fecha = filtros.fecha || hoy.fecha;
-    let empleado = filtros.id_empleado || null;
-    if (usuario.rol === 'REPARTIDOR') {
-      exigir(!empleado || empleado === usuario.id_empleado, 'Solo puedes consultar tus propias ventas.', 403);
-      empleado = usuario.id_empleado;
-    }
-    const binds = { fecha, empleado, canal: filtros.canal || null, pago: filtros.estado_pago || null };
-    const condicion = `estado_registro='CONFIRMADA'
-      AND NVL(fecha_cobro,fecha_venta)>=TO_DATE(:fecha,'YYYY-MM-DD') AND NVL(fecha_cobro,fecha_venta)<TO_DATE(:fecha,'YYYY-MM-DD')+1
-      AND (:empleado IS NULL OR id_empleado=:empleado) AND (:canal IS NULL OR canal=:canal)
-      AND (:pago IS NULL OR estado_pago=:pago)`;
-    const [resumen] = await consultar(c, `SELECT COUNT(*) cantidad_ventas,
-      COUNT(CASE WHEN estado_pago='COBRADA' THEN 1 END) cobradas,
-      NVL(SUM(CASE WHEN estado_pago='COBRADA' THEN total_venta ELSE 0 END),0) total_cobrado,
-      NVL(SUM(CASE WHEN estado_pago='COBRADA' THEN descuento ELSE 0 END),0) descuentos_cobrados,
-      NVL(SUM(CASE WHEN estado_pago='COBRADA' AND metodo_pago='EFECTIVO' THEN total_venta ELSE 0 END),0) efectivo,
-      NVL(SUM(CASE WHEN estado_pago='COBRADA' AND metodo_pago='TRANSFERENCIA' THEN total_venta ELSE 0 END),0) transferencia
-      FROM Venta WHERE ${condicion}`, binds);
-    const filas = await consultar(c, `SELECT id_venta FROM Venta WHERE ${condicion}
-      ORDER BY id_venta DESC OFFSET :offset ROWS FETCH NEXT :limite ROWS ONLY`, { ...binds, limite: filtros.limite, offset: filtros.offset });
+  const fecha = filtros.fecha || fechaActual();
+  let id = filtros.id_empleado;
+  if (usuario.rol === 'REPARTIDOR') {
+    exigir(!id || id === usuario.id_empleado, 'Solo puedes consultar tus propias ventas.', 403); id = usuario.id_empleado;
+  }
+  return transaccion(async session => {
+    const filas = await mongoDb.collection('pedidos').find({
+      $or: [{ fecha_cobro: rangoDia(fecha) }, { estado_pago: { $ne: 'COBRADA' }, creado_en: rangoDia(fecha), fecha_cobro: null }],
+      ...(id ? { id_empleado: id } : {}), ...(filtros.canal ? { canal: filtros.canal } : {}),
+      ...(filtros.estado_pago ? { estado_pago: filtros.estado_pago } : {}),
+    }, { session }).sort({ id_venta: -1 }).toArray();
+    const pagadas = filas.filter(p => p.estado_pago === 'COBRADA');
+    const resumen = { cantidad_ventas: filas.length, cobradas: pagadas.length, total_cobrado: sumar(pagadas, 'total'),
+      descuentos_cobrados: sumar(pagadas, 'descuento'), efectivo: sumar(pagadas.filter(p => p.metodo_pago === 'EFECTIVO'), 'total'),
+      transferencia: sumar(pagadas.filter(p => p.metodo_pago === 'TRANSFERENCIA'), 'total') };
     const ventas = [];
-    for (const fila of filas) ventas.push(await leerVenta(c, fila.id_venta));
+    for (const p of filas.slice(filtros.offset, filtros.offset + filtros.limite)) ventas.push(await ventaPublica(p, session));
     return { fecha, ventas, resumen };
   });
 }

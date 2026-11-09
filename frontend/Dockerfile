@@ -1,9 +1,8 @@
-FROM node:24-bookworm-slim
+FROM node:24-alpine
 WORKDIR /app
-COPY --chown=node:node package*.json ./
-RUN --mount=type=secret,id=proxy_ca if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci
+# Vite necesita escribir su caché; dejar la aplicación a nombre del usuario node.
 COPY --chown=node:node . .
-RUN chown -R node:node /app
+RUN npm ci && npm cache clean --force && chown -R node:node /app
 USER node
 EXPOSE 3000
 CMD ["npm", "run", "dev"]

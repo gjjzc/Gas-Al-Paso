@@ -6,7 +6,7 @@ export async function obtenerHealth(req, res, next) {
     res.status(resultado.estado === 'OK' ? 200 : 503).json({
       ...resultado,
       mensaje: resultado.estado === 'OK'
-        ? 'Oracle y MongoDB disponibles.'
+        ? 'MongoDB y Redis disponibles.'
         : 'Una o más bases de datos no están disponibles.',
     });
   } catch (error) {

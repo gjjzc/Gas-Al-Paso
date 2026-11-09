@@ -126,7 +126,7 @@ test('CLIENTE no puede abrir fichas de administracion', async ({ page }) => {
       json: {
         id_usuario: 981,
         id_cliente: 981,
-        nombre: 'Cliente Prueba',
+        nombre: 'Valentina Soto',
         rol: 'CLIENTE',
       },
     }),

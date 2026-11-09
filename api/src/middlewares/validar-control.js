@@ -1,8 +1,8 @@
 import { entero, exigir } from './validar.js';
 export function dinero(valor, campo) {
   exigir(typeof valor === 'number' && Number.isFinite(valor) && valor >= 0 && valor <= 9999999999.99 &&
-    Math.abs(valor*100-Math.round(valor*100)) < 0.0001, `${campo} debe ser un monto no negativo con hasta dos decimales.`);
-  return Math.round(valor*100)/100;
+    /^\d+(?:\.\d{1,2})?$/.test(String(valor)), `${campo} debe ser un monto no negativo con hasta dos decimales.`);
+  return valor;
 }
 export function cantidades(items, campo, minimo = 0) {
   exigir(Array.isArray(items) && items.length <= 100, `${campo} debe ser una lista de hasta 100 productos.`);

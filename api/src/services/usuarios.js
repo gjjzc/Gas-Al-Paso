@@ -1,137 +1,126 @@
 import bcrypt from 'bcrypt';
-import { consultar, conConexion, transaccion, salidaNumero } from './oracle.js';
-import { buscarOCrearCliente, validarComuna, exigirContactoRevisado } from './clientes.js';
-import { errorCampo } from '../middlewares/validar-cliente.js';
-import { auditar, estadoSincronizacion } from './sincronizacion.js';
+import { mongoDb } from '../config/databases.js';
+import { siguienteId } from './contadores.js';
+import { transaccion } from './transacciones.js';
+import { auditar } from './auditoria.js';
+import { buscarOCrearCliente, validarComuna, direccionTexto } from './clientes.js';
 import { exigir } from '../middlewares/validar.js';
+import { errorCampo } from '../middlewares/validar-cliente.js';
 
-const seleccion = `SELECT u.id_usuario,u.email,u.rol,u.activo,u.id_empleado,u.id_cliente,u.token_version,
-    COALESCE(e.nombre,c.nombre) nombre,c.telefono,c.direccion_principal,c.id_comuna,c.telefono_revision
-    FROM Usuario u LEFT JOIN Empleado e ON e.id_empleado=u.id_empleado
-    LEFT JOIN Cliente c ON c.id_cliente=u.id_cliente`;
 export function usuarioPublico(usuario) {
-  const { password_hash, token_version, ...publico } = usuario;
-  return { ...publico, activo: usuario.activo === 1 };
+  const { _id, password_hash, token_version, ...publico } = usuario;
+  return { ...publico, activo: usuario.activo === true };
 }
-export async function buscarUsuario(id, conexion) {
-  const buscar = async c => (await consultar(c, `${seleccion} WHERE u.id_usuario=:id`, { id }))[0];
-  return conexion ? buscar(conexion) : conConexion(buscar);
+export async function buscarUsuario(id, session) {
+  const u = await mongoDb.collection('usuarios').findOne({ id_usuario: id }, { session });
+  if (!u) return null;
+  const e = u.id_empleado ? await mongoDb.collection('empleados').findOne({ id_empleado: u.id_empleado }, { session }) : null;
+  const c = u.id_cliente ? await mongoDb.collection('clientes').findOne({ id_cliente: u.id_cliente }, { session }) : null;
+  return { id_usuario: u.id_usuario, email: u.email, rol: u.rol, activo: u.activo, id_empleado: u.id_empleado,
+    id_cliente: u.id_cliente, token_version: u.token_version, nombre: e?.nombre || c?.nombre || null,
+    telefono: c?.telefono || null, direccion_principal: c ? direccionTexto(c.direccion_principal) : null,
+    id_comuna: c?.direccion_principal.comuna || null, telefono_revision: c ? 0 : null };
 }
-export async function buscarLogin(email) {
-  return conConexion(async c => (await consultar(c,
-    'SELECT id_usuario,email,password_hash,rol,activo,token_version FROM Usuario WHERE email=:email', { email }))[0]);
+export const buscarLogin = email => mongoDb.collection('usuarios').findOne({ email });
+async function coordinar(session) {
+  // Equivale a serializar las altas y la protección del último administrador.
+  await siguienteId('coordinacion_usuarios', session);
 }
-export async function listarUsuarios({ limite, offset, rol, activo, buscar = '' }) {
-  return conConexion(async c => (await consultar(c, `${seleccion} WHERE (:rol IS NULL OR u.rol=:rol) AND (:activo IS NULL OR u.activo=:activo)
-    AND (:buscar IS NULL OR INSTR(LOWER(COALESCE(e.nombre,c.nombre)||' '||u.email),:buscar)>0)
-    ORDER BY u.id_usuario OFFSET :offset ROWS FETCH NEXT :limite ROWS ONLY`,
-    { limite, offset, rol: rol || null, activo: activo === undefined ? null : Number(activo), buscar: buscar.toLowerCase() || null })).map(usuarioPublico));
-}
-async function cambiarComunas(c, empleado, comunas) {
-  await c.execute('DELETE FROM Repartidor_Comuna WHERE id_empleado=:id', { id: empleado });
-  for (const id of comunas) {
-    await c.execute('INSERT INTO Repartidor_Comuna(id_empleado,id_comuna) VALUES(:empleado,:id)', { empleado, id });
-  }
-}
+async function comprobarComunas(session, ids) { for (const id of ids) await validarComuna(session, id); }
 export async function crearUsuario(datos, actor) {
   const hash = await bcrypt.hash(datos.password, 12);
-  const resultado = await transaccion(async c => {
-    // Mismo orden de bloqueo que editarUsuario; evita altas dobles y cambios de acceso concurrentes.
-    await c.execute('LOCK TABLE Usuario IN EXCLUSIVE MODE');
-    let creado = true;
-    let empleado = null;
-    let cliente = null;
+  return transaccion(async session => {
+    await coordinar(session);
+    let id_cliente = null, id_empleado = null, vinculado = false;
     if (datos.rol === 'CLIENTE') {
-      await validarComuna(c, datos.id_comuna);
-      const encontrado = await buscarOCrearCliente(c, datos);
-      creado = encontrado.creado;
-      exigirContactoRevisado(encontrado.cliente);
-      cliente = encontrado.cliente.id_cliente;
-      const [vinculado] = await consultar(c, 'SELECT id_usuario FROM Usuario WHERE id_cliente=:id', { id: cliente });
-      if(vinculado) errorCampo('telefono','Este teléfono ya tiene una cuenta. Inicia sesión con esa cuenta.',409);
-      if(!creado) {
-        if(encontrado.cliente.direccion_principal!==datos.direccion_principal || encontrado.cliente.id_comuna!==datos.id_comuna)
-          await c.execute('UPDATE Cliente SET calle_principal=NULL,numero_principal=NULL,referencia_principal=NULL WHERE id_cliente=:id',{id:cliente});
-        await c.execute(`UPDATE Cliente SET nombre=:nombre,direccion_principal=:direccion,id_comuna=:comuna
-          WHERE id_cliente=:id`, { nombre:datos.nombre,direccion:datos.direccion_principal,comuna:datos.id_comuna,id:cliente });
-      }
+      await validarComuna(session, datos.id_comuna);
+      const r = await buscarOCrearCliente(session, datos);
+      id_cliente = r.cliente.id_cliente; vinculado = !r.creado;
+      if (await mongoDb.collection('usuarios').findOne({ id_cliente }, { session })) errorCampo('telefono', 'Este teléfono ya tiene una cuenta. Inicia sesión con esa cuenta.', 409);
+      const misma = direccionTexto(r.cliente.direccion_principal) === datos.direccion_principal && r.cliente.direccion_principal.comuna === datos.id_comuna;
+      await mongoDb.collection('clientes').updateOne({ id_cliente }, { $set: {
+        nombre: datos.nombre, direccion_principal: misma ? r.cliente.direccion_principal : { calle: datos.direccion_principal, numero: '', comuna: datos.id_comuna, referencia: '' },
+      } }, { session });
     } else {
-      const r = await c.execute(`INSERT INTO Empleado(id_empleado,nombre,id_tienda)
-        VALUES(seq_empleado.NEXTVAL,:nombre,1) RETURNING id_empleado INTO :id`, { nombre: datos.nombre, id: salidaNumero() });
-      empleado = r.outBinds.id[0];
+      await comprobarComunas(session, datos.comunas || []);
+      id_empleado = await siguienteId('id_empleado', session);
+      await mongoDb.collection('empleados').insertOne({ id_empleado, nombre: datos.nombre, rol: datos.rol, activo: datos.activo !== false, comunas: datos.comunas || [] }, { session });
     }
-    const r = await c.execute(`INSERT INTO Usuario(email,password_hash,rol,activo,id_empleado,id_cliente)
-      VALUES(:email,:hash,:rol,:activo,:empleado,:cliente) RETURNING id_usuario INTO :id`, {
-      email: datos.email, hash, rol: datos.rol, activo: datos.activo === false ? 0 : 1,
-      empleado, cliente, id: salidaNumero(),
-    });
-    if (datos.rol === 'REPARTIDOR') await cambiarComunas(c, empleado, datos.comunas || []);
-    const usuario = usuarioPublico(await buscarUsuario(r.outBinds.id[0], c));
-    const eventos = !creado ? [await auditar(c,'CLIENTE_VINCULADO_USUARIO',actor || usuario,{id_cliente:cliente,id_usuario:usuario.id_usuario})] : [];
-    return { usuario, eventos };
+    const id_usuario = await siguienteId('id_usuario', session);
+    await mongoDb.collection('usuarios').insertOne({ id_usuario, email: datos.email, password_hash: hash,
+      rol: datos.rol, activo: datos.activo !== false, id_empleado, id_cliente, token_version: 0 }, { session });
+    const salida = usuarioPublico(await buscarUsuario(id_usuario, session));
+    if (vinculado) await auditar(session, 'CLIENTE_VINCULADO_USUARIO', actor || salida, { id_cliente, id_usuario });
+    return salida;
   });
-  if(resultado.eventos.length) await estadoSincronizacion(resultado.eventos);
-  return resultado.usuario;
 }
 export async function editarUsuario(id, datos) {
   const hash = datos.password ? await bcrypt.hash(datos.password, 12) : null;
-  return transaccion(async c => {
-    // Serializa cambios de administradores para no desactivar al ultimo ADMIN activo.
-    await c.execute('LOCK TABLE Usuario IN EXCLUSIVE MODE');
-    const actual = await buscarUsuario(id, c);
+  return transaccion(async session => {
+    await coordinar(session);
+    const actual = await buscarUsuario(id, session);
     exigir(actual, 'Usuario no encontrado.', 404);
     const rol = datos.rol || actual.rol;
     exigir((rol === 'CLIENTE') === (actual.rol === 'CLIENTE'), 'No se puede convertir un cliente en empleado ni al reves.', 409);
-    if (actual.rol === 'ADMIN' && actual.activo === 1 && (rol !== 'ADMIN' || datos.activo === false)) {
-      const [conteo] = await consultar(c, "SELECT COUNT(*) cantidad FROM Usuario WHERE rol='ADMIN' AND activo=1");
-      exigir(conteo.cantidad > 1, 'No puedes desactivar ni cambiar el rol del ultimo administrador activo.', 409);
+    if (actual.rol === 'ADMIN' && actual.activo && (rol !== 'ADMIN' || datos.activo === false)) {
+      exigir(await mongoDb.collection('usuarios').countDocuments({ rol: 'ADMIN', activo: true }, { session }) > 1,
+        'No puedes desactivar ni cambiar el rol del ultimo administrador activo.', 409);
     }
-    const mapa = { email: 'email', rol: 'rol', activo: 'activo' };
-    const sets = [];
-    const binds = { id };
-    for (const campo of Object.keys(mapa)) if (Object.hasOwn(datos, campo)) {
-      sets.push(`${mapa[campo]}=:${campo}`);
-      binds[campo] = campo === 'activo' ? Number(datos[campo]) : datos[campo];
-    }
-    if (hash) { sets.push('password_hash=:hash'); binds.hash = hash; }
-    if (hash || Object.hasOwn(datos, 'rol') || Object.hasOwn(datos, 'activo')) sets.push('token_version=token_version+1');
-    if (sets.length) await c.execute(`UPDATE Usuario SET ${sets.join(',')} WHERE id_usuario=:id`, binds);
+    const cambios = {};
+    for (const k of ['email', 'rol', 'activo']) if (datos[k] !== undefined) cambios[k] = datos[k];
+    if (hash) cambios.password_hash = hash;
+    const update = { $set: cambios };
+    if (hash || datos.rol !== undefined || datos.activo !== undefined) update.$inc = { token_version: 1 };
+    if (Object.keys(cambios).length) await mongoDb.collection('usuarios').updateOne({ id_usuario: id }, update, { session });
     if (actual.id_cliente) {
-      const columnas = { nombre: 'nombre', telefono: 'telefono', direccion_principal: 'direccion_principal', id_comuna: 'id_comuna' };
-      const cambios = Object.keys(columnas).filter(k => Object.hasOwn(datos, k));
-      if((datos.direccion_principal!==undefined && datos.direccion_principal!==actual.direccion_principal) || (datos.id_comuna!==undefined && datos.id_comuna!==actual.id_comuna))
-        await c.execute('UPDATE Cliente SET calle_principal=NULL,numero_principal=NULL,referencia_principal=NULL WHERE id_cliente=:id',{id:actual.id_cliente});
-      if (cambios.length) await c.execute(`UPDATE Cliente SET ${cambios.map(k => `${columnas[k]}=:${k}`).join(',')} WHERE id_cliente=:id`,
-        Object.fromEntries([['id', actual.id_cliente], ...cambios.map(k => [k, datos[k]])]));
+      const cliente = await mongoDb.collection('clientes').findOne({ id_cliente: actual.id_cliente }, { session });
+      const valores = {};
+      for (const k of ['nombre', 'telefono']) if (datos[k] !== undefined) valores[k] = datos[k];
+      if (datos.direccion_principal !== undefined || datos.id_comuna !== undefined) {
+        const comuna = datos.id_comuna || cliente.direccion_principal.comuna;
+        await validarComuna(session, comuna);
+        const texto = datos.direccion_principal ?? direccionTexto(cliente.direccion_principal);
+        if (texto !== direccionTexto(cliente.direccion_principal) || comuna !== cliente.direccion_principal.comuna) valores.direccion_principal = { calle: texto, numero: '', comuna, referencia: '' };
+      }
+      await mongoDb.collection('clientes').updateOne({ _id: cliente._id }, { $set: valores, $inc: { version: 1 } }, { session });
     } else {
-      exigir(!['telefono', 'direccion_principal', 'id_comuna'].some(k => Object.hasOwn(datos, k)), 'Los datos de domicilio solo corresponden a clientes.');
-      if (datos.nombre) await c.execute('UPDATE Empleado SET nombre=:nombre WHERE id_empleado=:id', { nombre: datos.nombre, id: actual.id_empleado });
-      if (rol === 'ADMIN' && actual.rol === 'REPARTIDOR') await cambiarComunas(c, actual.id_empleado, []);
+      exigir(!['telefono', 'direccion_principal', 'id_comuna'].some(k => datos[k] !== undefined), 'Los datos de domicilio solo corresponden a clientes.');
+      const empleado = { rol };
+      if (datos.nombre) empleado.nombre = datos.nombre;
+      if (datos.activo !== undefined) empleado.activo = datos.activo;
+      if (rol === 'ADMIN') empleado.comunas = [];
+      await mongoDb.collection('empleados').updateOne({ id_empleado: actual.id_empleado }, { $set: empleado, $inc: { version_actividad: 1 } }, { session });
     }
-    return usuarioPublico(await buscarUsuario(id, c));
+    return usuarioPublico(await buscarUsuario(id, session));
   });
 }
-export async function comunas() {
-  return conConexion(c => consultar(c, 'SELECT id_comuna,nombre FROM Comuna ORDER BY nombre'));
+export async function listarUsuarios({ limite, offset, rol, activo, buscar = '' }) {
+  const docs = await mongoDb.collection('usuarios').find({ ...(rol ? { rol } : {}), ...(activo !== undefined ? { activo } : {}) }).sort({ id_usuario: 1 }).toArray();
+  const filas = [];
+  for (const d of docs) {
+    const u = usuarioPublico(await buscarUsuario(d.id_usuario));
+    if (`${u.nombre} ${u.email}`.toLowerCase().includes(buscar.toLowerCase())) filas.push(u);
+  }
+  return filas.slice(offset, offset + limite);
 }
+export const comunas = () => mongoDb.collection('comunas').find({}, { projection: { _id: 0 } }).sort({ nombre: 1 }).toArray();
 export async function repartidores(comuna) {
-  return conConexion(async c => {
-    const filas = await consultar(c, `SELECT e.id_empleado,e.nombre,u.id_usuario,
-      CASE WHEN EXISTS(SELECT 1 FROM Repartidor_Comuna rc WHERE rc.id_empleado=e.id_empleado AND rc.id_comuna=:comuna)
-        THEN 1 ELSE 0 END cubre_comuna
-      FROM Empleado e JOIN Usuario u ON u.id_empleado=e.id_empleado
-      WHERE u.rol='REPARTIDOR' AND u.activo=1 ORDER BY cubre_comuna DESC,e.nombre`, { comuna });
-    const coberturas = await consultar(c, `SELECT rc.id_empleado,co.id_comuna,co.nombre
-      FROM Repartidor_Comuna rc JOIN Comuna co ON co.id_comuna=rc.id_comuna ORDER BY co.nombre`);
-    return filas.map(r => ({ ...r, cubre_comuna: r.cubre_comuna === 1,
-      comunas: coberturas.filter(co => co.id_empleado === r.id_empleado).map(({ id_comuna, nombre }) => ({ id_comuna, nombre })) }));
-  });
+  const empleados = await mongoDb.collection('empleados').find({ rol: 'REPARTIDOR', activo: true }).toArray();
+  const filas = [];
+  for (const e of empleados) {
+    const u = await mongoDb.collection('usuarios').findOne({ id_empleado: e.id_empleado, rol: 'REPARTIDOR', activo: true });
+    if (!u) continue;
+    const cobertura = await mongoDb.collection('comunas').find({ id_comuna: { $in: e.comunas } }, { projection: { _id: 0 } }).sort({ nombre: 1 }).toArray();
+    filas.push({ id_empleado: e.id_empleado, nombre: e.nombre, id_usuario: u.id_usuario, cubre_comuna: e.comunas.includes(comuna), comunas: cobertura });
+  }
+  return filas.sort((a, b) => Number(b.cubre_comuna) - Number(a.cubre_comuna) || a.nombre.localeCompare(b.nombre));
 }
 export async function asignarComunas(empleado, ids) {
-  return transaccion(async c => {
-    const [u] = await consultar(c, "SELECT id_usuario FROM Usuario WHERE id_empleado=:id AND rol='REPARTIDOR' AND activo=1 FOR UPDATE", { id: empleado });
+  return transaccion(async session => {
+    await comprobarComunas(session, ids);
+    const u = await mongoDb.collection('usuarios').findOne({ id_empleado: empleado, rol: 'REPARTIDOR', activo: true }, { session });
     exigir(u, 'Repartidor activo no encontrado.', 404);
-    await cambiarComunas(c, empleado, ids);
+    await mongoDb.collection('empleados').updateOne({ id_empleado: empleado }, { $set: { comunas: ids }, $inc: { version_actividad: 1 } }, { session });
     return { id_empleado: empleado, comunas: ids };
   });
 }

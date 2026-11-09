@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
-const foto = '/productos/prueba-local.svg';
-// Fixture sintética de prueba: usa el SVG local existente, no incorpora fotos ni red externa.
+const foto = '/productos/producto-local.svg';
+// Fixture sintética de integración: usa el SVG local existente, no incorpora fotos ni red externa.
 async function preparar(page, rol='CLIENTE') {
   await page.addInitScript(() => sessionStorage.setItem('gas-al-paso.token','fotos-test'));
   await page.route('**/api/auth/me',r=>r.fulfill({json:{id_usuario:1,id_cliente:1,id_empleado:1,nombre:'Fotos Test',rol}}));
-  await page.route('**/productos/prueba-local.svg',r=>r.fulfill({path:'public/llama.svg',contentType:'image/svg+xml'}));
+  await page.route('**/productos/producto-local.svg',r=>r.fulfill({path:'public/llama.svg',contentType:'image/svg+xml'}));
   await page.route('**/productos/falta.jpg',r=>r.fulfill({status:404,body:''}));
   await page.route('**/api/carrito',r=>r.fulfill({json:{items:[{id_producto:1,nombre:'Gas 11kg',cantidad:2,precio_unitario:15000,imagen:foto}],subtotal:30000,descuento:3000,total:27000}}));
 }

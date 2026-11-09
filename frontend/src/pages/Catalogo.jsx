@@ -110,10 +110,9 @@ export function Catalogo() {
         <div className="encabezado">
           <div>
             <p className="ceja">NUESTROS PRODUCTOS</p>
-            <h2>Todo listo para tu hogar</h2>
+            <h2>Gas listo para tu hogar</h2>
             <p className="muted">
               Balones y accesorios. Precios en pesos chilenos.
-              Imágenes generadas de referencia.
             </p>
           </div>
           <label className="buscador">

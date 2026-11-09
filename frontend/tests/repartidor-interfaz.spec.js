@@ -37,13 +37,13 @@ test('no se puede preparar un cierre si falla la consulta de lo esperado', async
       falla
         ? {
             status: 503,
-            json: { mensaje: 'Oracle temporalmente no disponible.' },
+            json: { mensaje: 'Base de datos temporalmente no disponible.' },
           }
         : { json: abierto },
     ),
   );
   await page.goto('/repartidor/cierre');
-  await expect(page.getByRole('alert')).toContainText('Oracle temporalmente');
+  await expect(page.getByRole('alert')).toContainText('Base de datos temporalmente');
   await expect(
     page.getByRole('button', { name: 'Revisar cierre de jornada' }),
   ).toHaveCount(0);

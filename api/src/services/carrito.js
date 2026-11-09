@@ -1,72 +1,94 @@
-import { conImagenes, imagenLocal } from './imagenes.js';
-import { randomUUID, createHash } from 'node:crypto';
-import { mongoDb, conectarMongo } from '../config/databases.js';
-import { transaccion, consultar, conConexion } from './oracle.js';
+import { createHash } from 'node:crypto';
+import { mongoDb, redisClient } from '../config/databases.js';
+import { conImagenes } from './imagenes.js';
+import { calcular } from './importes.js';
 import { exigir, entero } from '../middlewares/validar.js';
+import { ErrorHttp } from '../middlewares/errores.js';
 
-export function importes(items) {
-  // Centavos enteros: evita acumular errores binarios si Oracle contiene decimales.
-  const centavos = items.reduce((suma, item) => suma + Math.round(item.precio_unitario*100)*item.cantidad, 0);
-  const descuento = centavos >= 3000000 ? Math.round(centavos/10) : 0;
-  return { subtotal: centavos/100, descuento: descuento/100, total: (centavos-descuento)/100 };
+// La API de Compose es un único proceso. Serializar sus operaciones de carrito y checkout.
+// Los cambios del HASH, además, son atómicos en Redis mediante Lua.
+const turnos = new Map();
+export async function conCarritoBloqueado(id, accion) {
+  const anterior = turnos.get(id) || Promise.resolve();
+  let liberar;
+  const turno = new Promise(resolve => { liberar = resolve; });
+  turnos.set(id, turno);
+  await anterior;
+  try { return await accion(); }
+  finally { liberar(); if (turnos.get(id) === turno) turnos.delete(id); }
 }
-export async function bloquearCliente(c, id) {
-  const [cliente] = await consultar(c, 'SELECT id_cliente,nombre,telefono,id_comuna FROM Cliente WHERE id_cliente=:id FOR UPDATE', { id });
-  exigir(cliente, 'Cliente no encontrado.', 404);
-  return cliente;
+async function redis(accion) {
+  try { return await accion(); }
+  catch (error) { if (error.estado) throw error; throw new ErrorHttp(503, 'Una base de datos no esta disponible. Intenta nuevamente.'); }
 }
+const leer = `return {redis.call('HGETALL',KEYS[1]),redis.call('PEXPIRETIME',KEYS[1])}`;
 export async function leerCarrito(id) {
-  // El monitor TTL no es inmediato: nunca aceptar un carrito cuya fecha ya expiro.
-  await conectarMongo();
-  return mongoDb.collection('carritos').findOne({ id_cliente: id, expira_en: { $gt: new Date() } });
+  const [pares, expira] = await redis(() => redisClient.eval(leer, { keys: [`carrito:${id}`], arguments: [] }));
+  if (!pares.length || expira < 0) return null;
+  const items = [];
+  for (let n = 0; n < pares.length; n += 2) items.push({ id_producto: Number(pares[n]), ...JSON.parse(pares[n + 1]) });
+  items.sort((a, b) => a.id_producto - b.id_producto);
+  const version = createHash('sha256').update(JSON.stringify({ id, expira, items })).digest('hex');
+  return { items, version, expira_en: new Date(expira), actualizado_en: new Date(expira - 1800000), pares, expira };
 }
-export function versionCarrito(carrito) {
-  const items = carrito.items.map(({ id_producto, cantidad }) => ({ id_producto, cantidad })).sort((a,b) => a.id_producto-b.id_producto);
-  const version = carrito.version || createHash('sha256').update(JSON.stringify({ items, actualizado_en: carrito.actualizado_en })).digest('hex');
-  return `${carrito._id.toHexString()}:${version}`;
+export const versionCarrito = carrito => carrito.version;
+export async function limpiarConsumido(id, snapshot) {
+  if (!snapshot) return;
+  const codigo = `
+    if tonumber(redis.call('PEXPIRETIME',KEYS[1]))~=tonumber(ARGV[1]) then return 0 end
+    if redis.call('HLEN',KEYS[1])~=(#ARGV-1)/2 then return 0 end
+    for i=2,#ARGV,2 do if redis.call('HGET',KEYS[1],ARGV[i])~=ARGV[i+1] then return 0 end end
+    return redis.call('DEL',KEYS[1])`;
+  await redis(() => redisClient.eval(codigo, { keys: [`carrito:${id}`], arguments: [String(snapshot.expira), ...snapshot.pares] }));
 }
-async function disponible(c, id) {
+async function disponible(id) {
   const carrito = await leerCarrito(id);
-  if (!carrito) return null;
-  const [consumido] = await consultar(c, 'SELECT id_venta FROM Solicitud_Venta WHERE carrito_version=:version', { version: versionCarrito(carrito) });
-  return consumido ? null : carrito;
+  if (carrito && await mongoDb.collection('idempotencia').findOne({ alcance: 'carrito', clave: carrito.version })) {
+    await limpiarConsumido(id, carrito); return null;
+  }
+  return carrito;
 }
+export function importes(items) { const { subtotal, descuento, total } = calcular(items); return { subtotal, descuento, total }; }
 async function presentar(id, carrito) {
   const items = await conImagenes(carrito?.items || []);
   return { id_cliente: id, items, ...importes(items), version: carrito?.version || null,
     actualizado_en: carrito?.actualizado_en || null, expira_en: carrito?.expira_en || null };
 }
-export async function obtener(id) { return conConexion(async c => presentar(id, await disponible(c, id))); }
+export const obtener = id => conCarritoBloqueado(id, async () => presentar(id, await disponible(id)));
+const modificarHash = `
+  local campo=ARGV[2]; local anterior=redis.call('HGET',KEYS[1],campo)
+  if ARGV[1]=='QUITAR' then
+    if not anterior then return 'NO_ITEM' end
+    redis.call('HDEL',KEYS[1],campo)
+  else
+    if ARGV[1]=='CAMBIAR' and not anterior then return 'NO_ITEM' end
+    local item=cjson.decode(ARGV[3])
+    if ARGV[1]=='AGREGAR' and anterior then item.cantidad=item.cantidad+cjson.decode(anterior).cantidad end
+    if item.cantidad>9999 then return 'CANTIDAD' end
+    if not anterior and redis.call('HLEN',KEYS[1])>=50 then return 'LIMITE' end
+    redis.call('HSET',KEYS[1],campo,cjson.encode(item))
+  end
+  redis.call('EXPIRE',KEYS[1],1800)
+  return 'OK'`;
 export async function modificar(usuario, accion, idProducto, cantidad) {
-  return transaccion(async c => {
-    // Serializa cambios de un mismo cliente y su confirmacion sin reservar stock.
-    await bloquearCliente(c, usuario.id_cliente);
-    const carrito = await disponible(c, usuario.id_cliente);
+  return conCarritoBloqueado(usuario.id_cliente, async () => {
+    exigir(await mongoDb.collection('clientes').findOne({ id_cliente: usuario.id_cliente }), 'Cliente no encontrado.', 404);
+    await disponible(usuario.id_cliente);
     if (accion === 'VACIAR') {
-      await mongoDb.collection('carritos').deleteOne({ id_cliente: usuario.id_cliente });
+      await redis(() => redisClient.del(`carrito:${usuario.id_cliente}`));
       return presentar(usuario.id_cliente, null);
     }
-    const items = (carrito?.items || []).map(item => ({ ...item }));
-    const indice = items.findIndex(item => item.id_producto === idProducto);
-    if (accion === 'QUITAR') {
-      exigir(indice >= 0, 'El producto no esta en tu carrito.', 404);
-      items.splice(indice, 1);
-    } else {
-      const [producto] = await consultar(c, 'SELECT nombre,valor_unitario,activo FROM Productos WHERE id_producto=:id', { id: idProducto });
-      const catalogo = await mongoDb.collection('catalogo').findOne({ id_producto: idProducto, activo: true }, { projection: { _id: 1, imagen: 1 } });
-      exigir(producto?.activo === 1 && catalogo, 'Producto activo no encontrado.', 404);
-      if (accion === 'CAMBIAR') exigir(indice >= 0, 'El producto no esta en tu carrito.', 404);
-      const nuevaCantidad = accion === 'AGREGAR' && indice >= 0 ? items[indice].cantidad+cantidad : cantidad;
-      entero(nuevaCantidad, 'cantidad', 1, 9999);
-      const item = { imagen: imagenLocal(catalogo.imagen), id_producto: idProducto, nombre: producto.nombre, cantidad: nuevaCantidad, precio_unitario: producto.valor_unitario };
-      if (indice >= 0) items[indice] = item;
-      else items.push(item);
+    let item = {};
+    if (accion !== 'QUITAR') {
+      const p = await mongoDb.collection('catalogo').findOne({ id_producto: idProducto, activo: true });
+      exigir(p, 'Producto activo no encontrado.', 404);
+      entero(cantidad, 'cantidad', 1, 9999);
+      item = { nombre: p.nombre, cantidad, precio_unitario: p.precio };
     }
-    exigir(items.length <= 50, 'El carrito admite hasta 50 productos distintos.');
-    const ahora = new Date();
-    const nuevo = { id_cliente: usuario.id_cliente, items: items.sort((a,b) => a.id_producto-b.id_producto),
-      actualizado_en: ahora, expira_en: new Date(ahora.getTime()+30*60*1000), version: randomUUID() };
-    await mongoDb.collection('carritos').updateOne({ id_cliente: usuario.id_cliente }, { $set: nuevo }, { upsert: true });
-    return presentar(usuario.id_cliente, nuevo);
+    const r = await redis(() => redisClient.eval(modificarHash, { keys: [`carrito:${usuario.id_cliente}`], arguments: [accion, String(idProducto), JSON.stringify(item)] }));
+    exigir(r !== 'NO_ITEM', 'El producto no esta en tu carrito.', 404);
+    exigir(r !== 'CANTIDAD', 'cantidad debe ser un entero entre 1 y 9999.');
+    exigir(r !== 'LIMITE', 'El carrito admite hasta 50 productos distintos.');
+    return presentar(usuario.id_cliente, await leerCarrito(usuario.id_cliente));
   });
 }

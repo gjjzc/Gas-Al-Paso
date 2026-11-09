@@ -1,41 +1,43 @@
 name: gas-al-paso
 services:
-  oracle:
-    image: gvenzl/oracle-free:slim
-    environment:
-      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?Completa ORACLE_PASSWORD en .env}
-      APP_USER: ${APP_USER:-gas_app}
-      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
-    ports:
-      - "${ORACLE_HOST_PORT:-1522}:1521"
-    volumes:
-      - oracle_data:/opt/oracle/oradata
-      - ./db/oracle:/container-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "healthcheck.sh && test -f /opt/oracle/oradata/.gas-al-paso-fase1"]
-      interval: 10s
-      timeout: 5s
-      retries: 60
-      start_period: 60s
-    restart: unless-stopped
-
   mongo:
     image: mongo:7
+    entrypoint: ["bash", "/opt/gas-mongo/arrancar.sh"]
+    command: ["mongod", "--replSet", "rs0", "--keyFile", "/etc/mongo-keyfile/keyfile", "--bind_ip_all"]
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-gas_admin}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Completa MONGO_INITDB_ROOT_USERNAME en .env}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Completa MONGO_INITDB_ROOT_PASSWORD en .env}
       MONGO_INITDB_DATABASE: gas_al_paso
+      MONGO_APP_USER: ${MONGO_APP_USER:?Completa MONGO_APP_USER en .env}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Completa MONGO_APP_PASSWORD en .env}
     ports:
       - "${MONGO_HOST_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
+      - mongo_keyfile:/etc/mongo-keyfile
       - ./db/mongo:/docker-entrypoint-initdb.d:ro
+      - ./db/mongo/runtime:/opt/gas-mongo:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "const a = db.getSiblingDB('admin'); a.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD); const b = db.getSiblingDB('gas_al_paso'); quit(b.runCommand({ping:1}).ok === 1 && b.getCollectionNames().length === 4 ? 0 : 1)"]
-      interval: 10s
+      test: ["CMD", "env", "HOME=/tmp/mongo-health", "mongosh", "--quiet", "--file", "/opt/gas-mongo/health.js"]
+      interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 10s
+      retries: 40
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Completa REDIS_PASSWORD en .env}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli --no-auth-warning ping | grep -qx PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   api:
@@ -43,27 +45,32 @@ services:
     environment:
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET:?Completa JWT_SECRET en .env}
-      ORACLE_USER: ${APP_USER:-gas_app}
-      ORACLE_PASSWORD: ${APP_USER_PASSWORD:?Completa APP_USER_PASSWORD en .env}
-      ORACLE_CONNECT_STRING: oracle:1521/FREEPDB1
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Completa ADMIN_EMAIL en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Completa ADMIN_PASSWORD en .env}
+      TEST_ADMIN_EMAIL: ${TEST_ADMIN_EMAIL:-${ADMIN_EMAIL}}
+      TEST_ADMIN_PASSWORD: ${TEST_ADMIN_PASSWORD:-${ADMIN_PASSWORD}}
       MONGO_HOST: mongo
       MONGO_PORT: 27017
-      MONGO_USER: ${MONGO_INITDB_ROOT_USERNAME:-gas_admin}
-      MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Completa MONGO_INITDB_ROOT_PASSWORD en .env}
+      MONGO_REPLICA_SET: rs0
+      MONGO_APP_USER: ${MONGO_APP_USER:?Completa MONGO_APP_USER en .env}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Completa MONGO_APP_PASSWORD en .env}
       MONGO_DATABASE: gas_al_paso
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Completa REDIS_PASSWORD en .env}
     ports:
       - "4000:4000"
     depends_on:
-      oracle:
-        condition: service_healthy
       mongo:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "--input-type=module", "-e", "const r = await fetch('http://127.0.0.1:4000/api/health'); process.exit(r.ok ? 0 : 1)"]
-      interval: 15s
+      interval: 10s
       timeout: 12s
       retries: 5
-      start_period: 15s
+      start_period: 10s
     restart: unless-stopped
 
   frontend:
@@ -77,11 +84,12 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "--input-type=module", "-e", "const r = await fetch('http://127.0.0.1:3000'); process.exit(r.ok ? 0 : 1)"]
-      interval: 15s
+      interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
 volumes:
-  oracle_data:
   mongo_data:
+  mongo_keyfile:
+  redis_data:

@@ -17,7 +17,7 @@ export async function autenticar(req, res, next) {
   }
   // Consultar el estado vigente impide seguir usando tokens de usuarios desactivados.
   const usuario = await buscarUsuario(Number(claims.sub));
-  if (!usuario || usuario.activo !== 1 || usuario.token_version !== claims.version || usuario.rol !== claims.rol) {
+  if (!usuario || usuario.activo !== true || usuario.token_version !== claims.version || usuario.rol !== claims.rol) {
     throw new ErrorHttp(401, 'La sesion ya no es valida. Inicia sesion nuevamente.');
   }
   req.usuario = usuario;

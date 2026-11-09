@@ -7,7 +7,7 @@ const admin = {
 };
 async function iniciar(page, usuario = admin) {
   await page.addInitScript(() =>
-    sessionStorage.setItem('gas-al-paso.token', 'token-prueba-admin'),
+    sessionStorage.setItem('gas-al-paso.token', 'token-control-admin'),
   );
   await page.route('**/api/auth/me', (r) => r.fulfill({ json: usuario }));
   await page.route('**/api/comunas', (r) =>
@@ -82,7 +82,7 @@ test('último administrador protegido: muestra el error del servidor sin fingir 
 }) => {
   await iniciar(page);
   await page.route('**/api/usuarios?**', (r) =>
-    r.fulfill({ json: [{ ...admin, email: 'admin@demo.test', activo: true }] }),
+    r.fulfill({ json: [{ ...admin, email: 'admin@operaciones.test', activo: true }] }),
   );
   await page.route('**/api/usuarios/950', (r) =>
     r.fulfill({
@@ -95,7 +95,7 @@ test('último administrador protegido: muestra el error del servidor sin fingir 
   );
   await page.goto('/admin/usuarios');
   await page
-    .getByRole('button', { name: 'Editar admin@demo.test', exact: true })
+    .getByRole('button', { name: 'Editar admin@operaciones.test', exact: true })
     .click();
   await page
     .getByRole('checkbox', { name: 'Usuario activo', exact: true })
@@ -158,7 +158,7 @@ test('cuadratura resalta diferencias por método aunque el total de dinero sea c
             balones: [
               {
                 id_producto: 2,
-                nombre: 'Gas prueba',
+                nombre: 'Gas Familiar',
                 cargado: 3,
                 vendido: 1,
                 devuelto: 1,
@@ -169,7 +169,7 @@ test('cuadratura resalta diferencias por método aunque el total de dinero sea c
             productos_vendidos: [
               {
                 id_producto: 2,
-                nombre: 'Gas prueba',
+                nombre: 'Gas Familiar',
                 cantidad: 1,
                 subtotal: 20000,
                 descuento: 0,

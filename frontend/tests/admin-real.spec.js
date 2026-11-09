@@ -1,6 +1,7 @@
-import { telefonoPrueba } from './datos.js';
+import { claveTemporal } from './datos.js';
+import { telefonoTemporal } from './datos.js';
 import { test, expect } from '@playwright/test';
-test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para las bases demo.');
+test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para las bases de integración.');
 async function api(request, method, ruta, body, token, estado) {
   const r = await request.fetch(`/api${ruta}`, {
     method,
@@ -13,8 +14,8 @@ async function api(request, method, ruta, body, token, estado) {
 }
 async function entrar(
   page,
-  email = 'admin@demo.gasalpaso.test',
-  password = 'GasPasoDemo2026!',
+  email = process.env.TEST_ADMIN_EMAIL,
+  password = process.env.TEST_ADMIN_PASSWORD,
 ) {
   await page.goto('/login');
   await page.getByLabel('Correo electrónico').fill(email);
@@ -40,7 +41,7 @@ async function usuarioUI(page, { nombre, email, rol, clave }) {
   await page.getByLabel('Rol del usuario').selectOption(rol);
   await page.getByLabel('Contraseña inicial').fill(clave);
   if (rol === 'CLIENTE') {
-    await page.getByLabel('Teléfono del cliente').fill(telefonoPrueba());
+    await page.getByLabel('Teléfono del cliente').fill(telefonoTemporal());
     await page.getByLabel('Comuna del cliente').selectOption('1');
     await page.getByLabel('Dirección del cliente').fill('Calle Admin 123');
   }
@@ -66,7 +67,7 @@ async function productoUI(page, { nombre, precio, peso, categoria }) {
   await page.getByLabel('Stock de empresa').fill('20');
   await page
     .getByLabel('Descripción del producto')
-    .fill('Producto de prueba administrativa');
+    .fill('Producto de integración administrativa');
   await page
     .getByRole('button', { name: 'Guardar producto', exact: true })
     .click();
@@ -107,7 +108,7 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   test.setTimeout(180000);
   page.setDefaultTimeout(15000);
   const marca = Date.now();
-  const clave = 'AdminJornada2026!';
+  const clave = claveTemporal('jornada-admin');
   const repNombre = `Rep Admin ${marca}`;
   const clienteNombre = `Cliente Admin ${marca}`;
   const gasNombre = `Gas Admin ${marca}`;
@@ -184,13 +185,13 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
   )[0];
   await usuarioUI(page, {
     nombre: repNombre,
-    email: `rep-admin-${marca}@demo.test`,
+    email: `rep-admin-${marca}@operaciones.test`,
     rol: 'REPARTIDOR',
     clave,
   });
   await usuarioUI(page, {
     nombre: clienteNombre,
-    email: `cliente-admin-${marca}@demo.test`,
+    email: `cliente-admin-${marca}@operaciones.test`,
     rol: 'CLIENTE',
     clave,
   });
@@ -537,7 +538,7 @@ test('ADMIN recorre el día: usuarios, catálogo, comunas, carga, llamada, asign
     ),
   ).toBe(true);
 });
-test('ADMIN cancela y elimina un pedido conservando la venta anulada y el stock', async ({
+test('ADMIN cancela y elimina un pedido conservando auditoría y reponiendo stock', async ({
   page,
   request,
 }) => {
@@ -551,7 +552,7 @@ test('ADMIN cancela y elimina un pedido conservando la venta anulada y el stock'
     '/catalogo',
     {
       nombre: `Cancel admin ${Date.now()}`,
-      descripcion: 'Prueba cancelación',
+      descripcion: 'Pedido cancelado',
       categoria: 'GAS',
       peso: 5,
       precio: 1000,
@@ -564,8 +565,7 @@ test('ADMIN cancela y elimina un pedido conservando la venta anulada y el stock'
     'POST',
     '/pedidos/telefonico',
     {
-      id_cliente: 1,
-      direccion_entrega: { calle: 'Prueba', numero: '10', id_comuna: 1 },
+      cliente: { nombre: 'Camila Herrera', telefono: telefonoTemporal(), direccion: { calle: 'Los Aromos', numero: '10', id_comuna: 1 } },
       metodo_cobro: 'EFECTIVO',
       items: [{ id_producto: p.id_producto, cantidad: 1 }],
     },
@@ -605,5 +605,9 @@ test('ADMIN cancela y elimina un pedido conservando la venta anulada y el stock'
     ventas.ventas.some(
       (v) => v.id_venta === pedido.id_venta && v.estado_pago === 'ANULADA',
     ),
-  ).toBe(true);
+  ).toBe(false);
+  const eventos = await api(request, 'GET', '/auditoria?tipo=PEDIDO_ELIMINADO&limite=100', undefined, token);
+  const evento = eventos.find(e => e.detalle.id_venta === pedido.id_venta);
+  expect(evento.detalle.estado).toBe('CANCELADO');
+  expect(evento.detalle.items[0].cantidad).toBe(1);
 });

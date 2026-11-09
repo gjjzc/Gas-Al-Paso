@@ -224,7 +224,7 @@ function FormularioLlamada({ clienteInicial = null, telefonoInicial = '' }) {
                 inputMode="tel"
                 maxLength={40}
                 autoComplete="tel"
-                ayuda="Ejemplo: 912345678 o +56 9 1234 5678. Reutilizaremos el cliente si su teléfono ya existe."
+                ayuda="Formato: 912345678 o +56 9 1234 5678. Reutilizaremos el cliente si su teléfono ya existe."
                 error={errores.telefono || operacion.errorCampos?.telefono}
                 required
               />
@@ -294,7 +294,7 @@ function FormularioLlamada({ clienteInicial = null, telefonoInicial = '' }) {
             <Totales datos={totales} />
             <p className="nota">
               10% de descuento desde $30.000. Pago contra entrega; el stock y el
-              precio definitivo se comprueban al confirmar.
+              precio definitivo se validan al confirmar.
             </p>
             <Boton
               type="submit"

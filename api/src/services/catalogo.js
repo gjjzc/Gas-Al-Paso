@@ -1,94 +1,66 @@
+import { mongoDb, redisClient } from '../config/databases.js';
 import { imagenLocal } from './imagenes.js';
-import { mongoDb, conectarMongo } from '../config/databases.js';
-import { conConexion, consultar, transaccion, salidaNumero } from './oracle.js';
-import { encolar, auditar, estadoSincronizacion } from './sincronizacion.js';
+import { transaccion } from './transacciones.js';
+import { siguienteId } from './contadores.js';
+import { auditar } from './auditoria.js';
 import { exigir } from '../middlewares/validar.js';
-
-const columnas = 'id_producto,nombre,descripcion,peso,valor_unitario,stock,activo';
-
-function publicar(oracle, metadata = {}) {
-  const { _id, ...catalogo } = metadata;
-  return { ...catalogo, imagen: imagenLocal(catalogo.imagen), id_producto: oracle.id_producto, nombre: oracle.nombre,
-    descripcion: oracle.descripcion, peso: oracle.peso, precio: oracle.valor_unitario,
-    stock: oracle.stock, activo: oracle.activo === 1 };
+export const CLAVE_CATALOGO = 'catalogo:publico';
+export function publicar(p) {
+  const { _id, ...datos } = p;
+  return { ...datos, peso: p.atributos?.peso_kg, imagen: imagenLocal(p.imagen) };
 }
-async function buscarOracle(c, id, bloquear = false) {
-  const [producto] = await consultar(c, `SELECT ${columnas} FROM Productos WHERE id_producto=:id${bloquear ? ' FOR UPDATE' : ''}`, { id });
-  exigir(producto, 'Producto no encontrado.', 404);
-  return producto;
+export async function invalidarCatalogo() {
+  // La operación Mongo ya está confirmada; una caída de la caché no revierte el negocio.
+  try { await redisClient.del(CLAVE_CATALOGO); } catch { /* El TTL limita la vida de cualquier copia anterior. */ }
 }
 export async function listar({ limite, offset, categoria, incluirInactivos, buscar = '' }) {
-  const filtro = incluirInactivos ? {} : { activo: true };
-  if (categoria) filtro.categoria = categoria;
-  // Filtrar por el estado real de Oracle antes de paginar evita paginas incompletas.
-  const oracle = await conConexion(c => consultar(c, `SELECT ${columnas} FROM Productos ${incluirInactivos ? '' : 'WHERE activo=1'}`));
-  const porId = new Map(oracle.filter(p => `${p.nombre} ${p.descripcion}`.toLowerCase().includes(buscar.toLowerCase())).map(p => [p.id_producto, p]));
-  filtro.id_producto = { $in: [...porId.keys()] };
-  await conectarMongo();
-  const metadata = await mongoDb.collection('catalogo').find(filtro).sort({ id_producto: 1 }).skip(offset).limit(limite).toArray();
-  return metadata.map(m => publicar(porId.get(m.id_producto), m));
+  let filas;
+  if (!incluirInactivos) {
+    try { const cache = await redisClient.get(CLAVE_CATALOGO); if (cache) filas = JSON.parse(cache); } catch { /* Leer Mongo si la caché no está disponible. */ }
+  }
+  if (!filas) {
+    filas = (await mongoDb.collection('catalogo').find(incluirInactivos ? {} : { activo: true }).sort({ id_producto: 1 }).toArray()).map(publicar);
+    if (!incluirInactivos) try { await redisClient.set(CLAVE_CATALOGO, JSON.stringify(filas), { EX: 30 }); } catch { /* Caché opcional. */ }
+  }
+  return filas.filter(p => (!categoria || p.categoria === categoria) && `${p.nombre} ${p.descripcion}`.toLowerCase().includes(buscar.toLowerCase())).slice(offset, offset + limite);
 }
 export async function obtener(id, incluirInactivos = false) {
-  const oracle = await conConexion(c => buscarOracle(c, id));
-  await conectarMongo();
-  const metadata = await mongoDb.collection('catalogo').findOne({ id_producto: id });
-  exigir(metadata && (incluirInactivos || (oracle.activo === 1 && metadata.activo)), 'Producto no encontrado.', 404);
-  return publicar(oracle, metadata);
+  const p = await mongoDb.collection('catalogo').findOne({ id_producto: id, ...(incluirInactivos ? {} : { activo: true }) });
+  exigir(p, 'Producto no encontrado.', 404); return publicar(p);
 }
 export async function crear(datos, usuario) {
-  const { producto, eventos } = await transaccion(async c => {
-    const r = await c.execute(`INSERT INTO Productos(id_producto,nombre,descripcion,peso,valor_unitario,stock,activo)
-      VALUES(seq_producto.NEXTVAL,:nombre,:descripcion,:peso,:precio,:stock,:activo) RETURNING id_producto INTO :id`, {
-      nombre: datos.nombre, descripcion: datos.descripcion, peso: datos.peso, precio: datos.precio,
-      stock: datos.stock, activo: Number(datos.activo ?? true), id: salidaNumero(),
-    });
-    const id = r.outBinds.id[0];
-    const metadata = { id_producto: id, nombre: datos.nombre, descripcion: datos.descripcion,
-      categoria: datos.categoria, imagen: imagenLocal(datos.imagen),
-      atributos: datos.atributos || {}, destacado: datos.destacado ?? false, activo: datos.activo ?? true };
-    const eventos = [await encolar(c, 'CATALOGO_CREAR', metadata)];
-    eventos.push(await auditar(c, 'CAMBIO_PRECIO', usuario, { id_producto: id, antes: null, despues: datos.precio, creacion: true }));
-    eventos.push(await auditar(c, 'CAMBIO_STOCK', usuario, { id_producto: id, antes: null, despues: datos.stock, creacion: true }));
-    return { producto: publicar(await buscarOracle(c, id), metadata), eventos };
+  const producto = await transaccion(async session => {
+    const { peso, ...resto } = datos;
+    const p = { ...resto, id_producto: await siguienteId('id_producto', session), imagen: imagenLocal(datos.imagen),
+      atributos: { ...(datos.atributos || {}), peso_kg: peso }, activo: datos.activo ?? true, destacado: datos.destacado ?? false, actualizado_en: new Date() };
+    await mongoDb.collection('catalogo').insertOne(p, { session });
+    await auditar(session, 'CAMBIO_PRECIO', usuario, { id_producto: p.id_producto, antes: null, despues: p.precio, creacion: true });
+    await auditar(session, 'CAMBIO_STOCK', usuario, { id_producto: p.id_producto, antes: null, despues: p.stock, creacion: true });
+    return publicar(p);
   });
-  return { ...producto, sincronizacion: await estadoSincronizacion(eventos) };
+  await invalidarCatalogo(); return { ...producto, sincronizacion: 'OK' };
 }
-export async function editar(id, datos, usuario, soloOracle = false) {
-  let metadata;
-  if (!soloOracle) {
-    await conectarMongo();
-    metadata = await mongoDb.collection('catalogo').findOne({ id_producto: id });
-    exigir(metadata, 'Producto de catalogo no encontrado.', 404);
-  }
-  const { producto, eventos } = await transaccion(async c => {
-    const actual = await buscarOracle(c, id, true);
-    const cambios = {};
-    const mapa = { nombre: 'nombre', descripcion: 'descripcion', peso: 'peso', precio: 'valor_unitario', stock: 'stock', activo: 'activo' };
-    const presentes = Object.keys(mapa).filter(k => Object.hasOwn(datos, k));
-    if (presentes.length) {
-      await c.execute(`UPDATE Productos SET ${presentes.map(k => `${mapa[k]}=:${k}`).join(',')} WHERE id_producto=:id`,
-        Object.fromEntries([['id', id], ...presentes.map(k => [k, k === 'activo' ? Number(datos[k]) : datos[k]])]));
+export async function editar(id, datos, usuario) {
+  const p = await transaccion(async session => {
+    const actual = await mongoDb.collection('catalogo').findOne({ id_producto: id }, { session });
+    exigir(actual, 'Producto no encontrado.', 404);
+    const { peso, ...cambios } = datos;
+    if (datos.atributos !== undefined || peso !== undefined) cambios.atributos = {
+      ...(datos.atributos ?? actual.atributos), peso_kg: peso ?? actual.atributos.peso_kg,
+    };
+    cambios.actualizado_en = new Date();
+    await mongoDb.collection('catalogo').updateOne({ _id: actual._id }, { $set: cambios }, { session });
+    // Cada actualización explícita del precio deja rastro, incluso si el valor coincide.
+    for (const [campo, tipo] of [['precio', 'CAMBIO_PRECIO'], ['stock', 'CAMBIO_STOCK']]) {
+      if (datos[campo] !== undefined && (campo === 'precio' || datos[campo] !== actual[campo])) await auditar(session, tipo, usuario, { id_producto: id, antes: actual[campo], despues: datos[campo] });
     }
-    const eventos = [];
-    for (const k of ['nombre', 'descripcion', 'categoria', 'imagen', 'atributos', 'destacado', 'activo']) {
-      if (Object.hasOwn(datos, k)) cambios[k] = datos[k];
-    }
-    if (Object.keys(cambios).length) eventos.push(await encolar(c, 'CATALOGO_EDITAR',
-      { id_producto: id, cambios, permitir_ausente: soloOracle }));
-    if (Object.hasOwn(datos, 'precio') && datos.precio !== actual.valor_unitario) {
-      eventos.push(await auditar(c, 'CAMBIO_PRECIO', usuario, { id_producto: id, antes: actual.valor_unitario, despues: datos.precio }));
-    }
-    if (Object.hasOwn(datos, 'stock') && datos.stock !== actual.stock) {
-      eventos.push(await auditar(c, 'CAMBIO_STOCK', usuario, { id_producto: id, antes: actual.stock, despues: datos.stock }));
-    }
-    if (Object.keys(cambios).length) eventos.push(await auditar(c, 'EDICION_CATALOGO', usuario, { id_producto: id, campos: Object.keys(cambios) }));
-    return { producto: publicar(await buscarOracle(c, id), { ...metadata, ...cambios }), eventos };
+    const campos = Object.keys(datos).filter(k => !['precio', 'stock', 'peso'].includes(k));
+    if (campos.length) await auditar(session, 'EDICION_CATALOGO', usuario, { id_producto: id, campos });
+    return publicar({ ...actual, ...cambios });
   });
-  return { ...producto, sincronizacion: await estadoSincronizacion(eventos) };
+  await invalidarCatalogo(); return { ...p, sincronizacion: 'OK' };
 }
 export async function eliminar(id, usuario) {
-  await obtener(id, true);
-  const resultado = await editar(id, { activo: false }, usuario);
-  return { mensaje: 'Producto desactivado. Se conservan las ventas historicas.',
-    id_producto: id, sincronizacion: resultado.sincronizacion };
+  await editar(id, { activo: false }, usuario);
+  return { mensaje: 'Producto desactivado. Se conservan las ventas historicas.', id_producto: id, sincronizacion: 'OK' };
 }
