@@ -472,3 +472,72 @@ Authorization: Bearer {{tokenAdmin}}
 ### Cuadratura incluye productos_vendidos: gases y accesorios por trabajador
 GET {{base}}/cuadratura
 Authorization: Bearer {{tokenAdmin}}
+
+# ================================================================
+# CAMBIO 1: cliente sin cuenta, telefono normalizado y reutilizado.
+# Requiere migracion 10. Usar numero ficticio nuevo para una persona nueva.
+# ================================================================
+### ADMIN crea llamada sin correo ni contrasena
+POST {{base}}/pedidos/telefonico
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+Idempotency-Key: cambio1-llamada-demo-001
+
+{"cliente":{"nombre":"Maria Telefonica","telefono":"+56 9 1234-5678","direccion":{"calle":"Los Aromos","numero":"123","comuna":1,"referencia":"Porton azul"}},"items":[{"id_producto":2,"cantidad":2}],"metodo_cobro":"EFECTIVO","guardar_como_principal":false}
+
+### Mismo telefono, otro pedido/direccion: no duplica Cliente ni cambia su principal
+POST {{base}}/pedidos/telefonico
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+Idempotency-Key: cambio1-llamada-demo-002
+
+{"cliente":{"nombre":"Maria Telefonica","telefono":"912345678","direccion":{"calle":"Otra Calle","numero":"20","comuna":"Providencia"}},"items":[{"id_producto":2,"cantidad":1}],"metodo_cobro":"TRANSFERENCIA"}
+
+### Registro web posterior: se vincula al Cliente anterior (si aun no tiene Usuario)
+POST {{base}}/auth/registro
+Content-Type: application/json
+
+{"nombre":"Maria Telefonica","telefono":"912345678","email":"maria-telefono@demo.test","password":"TelefonoDemo2026!","direccion_principal":"Casa web 123","id_comuna":1}
+
+# ================================================================
+# CAMBIO 2: busqueda y ficha de Cliente (con o sin Usuario), solo ADMIN.
+# ================================================================
+### Buscar los ultimos cuatro digitos (maximo 10 coincidencias)
+GET {{base}}/clientes?telefono=5678
+Authorization: Bearer {{tokenAdmin}}
+
+### Telefono completo con prefijo: tambien se normaliza
+GET {{base}}/clientes?telefono=%2B56%209%201234%205678
+Authorization: Bearer {{tokenAdmin}}
+
+### Ficha e historial reciente (cambiar id segun tu cliente)
+GET {{base}}/clientes/1
+Authorization: Bearer {{tokenAdmin}}
+
+### Corregir nombre y direccion principal sin reescribir pedidos anteriores
+PATCH {{base}}/clientes/1
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nombre":"Ana Demo corregida","direccion_principal":{"calle":"Nueva Calle","numero":"450","comuna":1,"referencia":"Departamento B"}}
+
+### Solo corregir el nombre: conserva la estructura de direccion
+PATCH {{base}}/clientes/1
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"nombre":"Ana Demo"}
+
+### CAMBIO 3: editar solo la ruta local de la foto (ADMIN)
+PUT {{base}}/catalogo/2
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"imagen":"/productos/balon-11kg.png"}
+
+### CAMBIO 3: producto sin foto usa el reemplazo (ADMIN)
+PUT {{base}}/catalogo/2
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{"imagen":""}

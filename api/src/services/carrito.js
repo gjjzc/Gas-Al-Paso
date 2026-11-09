@@ -1,3 +1,4 @@
+import { conImagenes, imagenLocal } from './imagenes.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { mongoDb, conectarMongo } from '../config/databases.js';
 import { transaccion, consultar, conConexion } from './oracle.js';
@@ -30,8 +31,8 @@ async function disponible(c, id) {
   const [consumido] = await consultar(c, 'SELECT id_venta FROM Solicitud_Venta WHERE carrito_version=:version', { version: versionCarrito(carrito) });
   return consumido ? null : carrito;
 }
-function presentar(id, carrito) {
-  const items = carrito?.items || [];
+async function presentar(id, carrito) {
+  const items = await conImagenes(carrito?.items || []);
   return { id_cliente: id, items, ...importes(items), version: carrito?.version || null,
     actualizado_en: carrito?.actualizado_en || null, expira_en: carrito?.expira_en || null };
 }
@@ -52,12 +53,12 @@ export async function modificar(usuario, accion, idProducto, cantidad) {
       items.splice(indice, 1);
     } else {
       const [producto] = await consultar(c, 'SELECT nombre,valor_unitario,activo FROM Productos WHERE id_producto=:id', { id: idProducto });
-      const catalogo = await mongoDb.collection('catalogo').findOne({ id_producto: idProducto, activo: true }, { projection: { _id: 1 } });
+      const catalogo = await mongoDb.collection('catalogo').findOne({ id_producto: idProducto, activo: true }, { projection: { _id: 1, imagen: 1 } });
       exigir(producto?.activo === 1 && catalogo, 'Producto activo no encontrado.', 404);
       if (accion === 'CAMBIAR') exigir(indice >= 0, 'El producto no esta en tu carrito.', 404);
       const nuevaCantidad = accion === 'AGREGAR' && indice >= 0 ? items[indice].cantidad+cantidad : cantidad;
       entero(nuevaCantidad, 'cantidad', 1, 9999);
-      const item = { id_producto: idProducto, nombre: producto.nombre, cantidad: nuevaCantidad, precio_unitario: producto.valor_unitario };
+      const item = { imagen: imagenLocal(catalogo.imagen), id_producto: idProducto, nombre: producto.nombre, cantidad: nuevaCantidad, precio_unitario: producto.valor_unitario };
       if (indice >= 0) items[indice] = item;
       else items.push(item);
     }

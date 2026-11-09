@@ -1,9 +1,12 @@
 import bcrypt from 'bcrypt';
 import { consultar, conConexion, transaccion, salidaNumero } from './oracle.js';
+import { buscarOCrearCliente, validarComuna, exigirContactoRevisado } from './clientes.js';
+import { errorCampo } from '../middlewares/validar-cliente.js';
+import { auditar, estadoSincronizacion } from './sincronizacion.js';
 import { exigir } from '../middlewares/validar.js';
 
 const seleccion = `SELECT u.id_usuario,u.email,u.rol,u.activo,u.id_empleado,u.id_cliente,u.token_version,
-    COALESCE(e.nombre,c.nombre) nombre,c.telefono,c.direccion_principal,c.id_comuna
+    COALESCE(e.nombre,c.nombre) nombre,c.telefono,c.direccion_principal,c.id_comuna,c.telefono_revision
     FROM Usuario u LEFT JOIN Empleado e ON e.id_empleado=u.id_empleado
     LEFT JOIN Cliente c ON c.id_cliente=u.id_cliente`;
 export function usuarioPublico(usuario) {
@@ -30,18 +33,28 @@ async function cambiarComunas(c, empleado, comunas) {
     await c.execute('INSERT INTO Repartidor_Comuna(id_empleado,id_comuna) VALUES(:empleado,:id)', { empleado, id });
   }
 }
-export async function crearUsuario(datos) {
+export async function crearUsuario(datos, actor) {
   const hash = await bcrypt.hash(datos.password, 12);
-  return transaccion(async c => {
+  const resultado = await transaccion(async c => {
+    // Mismo orden de bloqueo que editarUsuario; evita altas dobles y cambios de acceso concurrentes.
+    await c.execute('LOCK TABLE Usuario IN EXCLUSIVE MODE');
+    let creado = true;
     let empleado = null;
     let cliente = null;
     if (datos.rol === 'CLIENTE') {
-      const r = await c.execute(`INSERT INTO Cliente(nombre,telefono,direccion_principal,id_comuna)
-        VALUES(:nombre,:telefono,:direccion,:comuna) RETURNING id_cliente INTO :id`, {
-        nombre: datos.nombre, telefono: datos.telefono, direccion: datos.direccion_principal,
-        comuna: datos.id_comuna, id: salidaNumero(),
-      });
-      cliente = r.outBinds.id[0];
+      await validarComuna(c, datos.id_comuna);
+      const encontrado = await buscarOCrearCliente(c, datos);
+      creado = encontrado.creado;
+      exigirContactoRevisado(encontrado.cliente);
+      cliente = encontrado.cliente.id_cliente;
+      const [vinculado] = await consultar(c, 'SELECT id_usuario FROM Usuario WHERE id_cliente=:id', { id: cliente });
+      if(vinculado) errorCampo('telefono','Este teléfono ya tiene una cuenta. Inicia sesión con esa cuenta.',409);
+      if(!creado) {
+        if(encontrado.cliente.direccion_principal!==datos.direccion_principal || encontrado.cliente.id_comuna!==datos.id_comuna)
+          await c.execute('UPDATE Cliente SET calle_principal=NULL,numero_principal=NULL,referencia_principal=NULL WHERE id_cliente=:id',{id:cliente});
+        await c.execute(`UPDATE Cliente SET nombre=:nombre,direccion_principal=:direccion,id_comuna=:comuna
+          WHERE id_cliente=:id`, { nombre:datos.nombre,direccion:datos.direccion_principal,comuna:datos.id_comuna,id:cliente });
+      }
     } else {
       const r = await c.execute(`INSERT INTO Empleado(id_empleado,nombre,id_tienda)
         VALUES(seq_empleado.NEXTVAL,:nombre,1) RETURNING id_empleado INTO :id`, { nombre: datos.nombre, id: salidaNumero() });
@@ -53,8 +66,12 @@ export async function crearUsuario(datos) {
       empleado, cliente, id: salidaNumero(),
     });
     if (datos.rol === 'REPARTIDOR') await cambiarComunas(c, empleado, datos.comunas || []);
-    return usuarioPublico(await buscarUsuario(r.outBinds.id[0], c));
+    const usuario = usuarioPublico(await buscarUsuario(r.outBinds.id[0], c));
+    const eventos = !creado ? [await auditar(c,'CLIENTE_VINCULADO_USUARIO',actor || usuario,{id_cliente:cliente,id_usuario:usuario.id_usuario})] : [];
+    return { usuario, eventos };
   });
+  if(resultado.eventos.length) await estadoSincronizacion(resultado.eventos);
+  return resultado.usuario;
 }
 export async function editarUsuario(id, datos) {
   const hash = datos.password ? await bcrypt.hash(datos.password, 12) : null;
@@ -82,6 +99,8 @@ export async function editarUsuario(id, datos) {
     if (actual.id_cliente) {
       const columnas = { nombre: 'nombre', telefono: 'telefono', direccion_principal: 'direccion_principal', id_comuna: 'id_comuna' };
       const cambios = Object.keys(columnas).filter(k => Object.hasOwn(datos, k));
+      if((datos.direccion_principal!==undefined && datos.direccion_principal!==actual.direccion_principal) || (datos.id_comuna!==undefined && datos.id_comuna!==actual.id_comuna))
+        await c.execute('UPDATE Cliente SET calle_principal=NULL,numero_principal=NULL,referencia_principal=NULL WHERE id_cliente=:id',{id:actual.id_cliente});
       if (cambios.length) await c.execute(`UPDATE Cliente SET ${cambios.map(k => `${columnas[k]}=:${k}`).join(',')} WHERE id_cliente=:id`,
         Object.fromEntries([['id', actual.id_cliente], ...cambios.map(k => [k, datos[k]])]));
     } else {

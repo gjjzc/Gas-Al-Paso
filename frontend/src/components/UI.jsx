@@ -32,7 +32,7 @@ export function Tarjeta({
     </Etiqueta>
   );
 }
-export function Campo({ label, ayuda, children, ...props }) {
+export function Campo({ label, ayuda, error, children, ...props }) {
   const id = useId();
   return (
     <div className="campo">
@@ -40,7 +40,12 @@ export function Campo({ label, ayuda, children, ...props }) {
       {children ? (
         <select
           id={id}
-          aria-describedby={ayuda ? `${id}-ayuda` : undefined}
+          aria-describedby={
+            [ayuda ? `${id}-ayuda` : '', error ? `${id}-error` : '']
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+          aria-invalid={error ? true : undefined}
           {...props}
         >
           {children}
@@ -48,11 +53,21 @@ export function Campo({ label, ayuda, children, ...props }) {
       ) : (
         <input
           id={id}
-          aria-describedby={ayuda ? `${id}-ayuda` : undefined}
+          aria-describedby={
+            [ayuda ? `${id}-ayuda` : '', error ? `${id}-error` : '']
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+          aria-invalid={error ? true : undefined}
           {...props}
         />
       )}
       {ayuda && <small id={`${id}-ayuda`}>{ayuda}</small>}
+      {error && (
+        <small className="campo-error" id={`${id}-error`} role="alert">
+          {error}
+        </small>
+      )}
     </div>
   );
 }

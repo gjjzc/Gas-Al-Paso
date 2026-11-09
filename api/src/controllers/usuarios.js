@@ -1,4 +1,5 @@
 import { campos, texto, correo, password, entero, booleano, listaComunas, paginacion, idRuta, exigir } from '../middlewares/validar.js';
+import { normalizarTelefono, nombreCliente } from '../middlewares/validar-cliente.js';
 import * as servicio from '../services/usuarios.js';
 
 const roles = ['CLIENTE', 'REPARTIDOR', 'ADMIN'];
@@ -11,7 +12,8 @@ export function validarAlta(cuerpo, registro = false) {
   const datos = { email: correo(cuerpo.email), password: password(cuerpo.password), nombre: texto(cuerpo.nombre, 'nombre', 80), rol };
   if (Object.hasOwn(cuerpo, 'activo')) datos.activo = booleano(cuerpo.activo, 'activo');
   if (rol === 'CLIENTE') {
-    datos.telefono = texto(cuerpo.telefono, 'telefono', 20);
+    datos.nombre = nombreCliente(cuerpo.nombre);
+    datos.telefono = normalizarTelefono(cuerpo.telefono);
     datos.direccion_principal = texto(cuerpo.direccion_principal, 'direccion_principal', 200);
     datos.id_comuna = entero(cuerpo.id_comuna, 'id_comuna');
     exigir(!Object.hasOwn(cuerpo, 'comunas'), 'Un cliente tiene id_comuna, no cobertura de reparto.');
@@ -32,7 +34,7 @@ export async function listar(req, res) {
     activo: activo === undefined ? undefined : activo === 'true',
     buscar: req.query.buscar === undefined ? '' : texto(req.query.buscar, 'buscar', 100, 0) }));
 }
-export async function crear(req, res) { res.status(201).json(await servicio.crearUsuario(validarAlta(req.body))); }
+export async function crear(req, res) { res.status(201).json(await servicio.crearUsuario(validarAlta(req.body), req.usuario)); }
 export async function editar(req, res) {
   campos(req.body, ['email', 'password', 'nombre', 'rol', 'activo', 'telefono', 'direccion_principal', 'id_comuna']);
   exigir(Object.keys(req.body).length > 0, 'Debes indicar al menos un cambio.');
@@ -41,7 +43,7 @@ export async function editar(req, res) {
     if (k === 'email') datos[k] = correo(v);
     if (k === 'password') datos[k] = password(v);
     if (k === 'nombre') datos[k] = texto(v, k, 80);
-    if (k === 'telefono') datos[k] = texto(v, k, 20);
+    if (k === 'telefono') datos[k] = normalizarTelefono(v);
     if (k === 'direccion_principal') datos[k] = texto(v, k, 200);
     if (k === 'id_comuna') datos[k] = entero(v, k);
     if (k === 'activo') datos[k] = booleano(v, k);

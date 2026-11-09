@@ -1,6 +1,14 @@
-import { defineConfig } from 'vite';
+import { defineConfig, createLogger } from 'vite';
 
+const logger = createLogger();
+const registrarError = logger.error.bind(logger);
+logger.error = (mensaje, opciones) =>
+  registrarError(
+    String(mensaje).replace(/([?&]telefono=)[^&\s]*/gi, '$1[oculto]'),
+    opciones,
+  );
 export default defineConfig({
+  customLogger: logger,
   // JSX automatico evita exigir import React en cada pantalla.
   esbuild: { jsx: 'automatic' },
   server: {

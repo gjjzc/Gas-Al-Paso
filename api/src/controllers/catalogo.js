@@ -1,3 +1,4 @@
+import { imagenLocal, rutaImagen } from '../services/imagenes.js';
 import { campos, texto, entero, booleano, exigir, idRuta, paginacion } from '../middlewares/validar.js';
 import * as servicio from '../services/catalogo.js';
 
@@ -19,7 +20,12 @@ function validar(cuerpo, alta = false, soloOracle = false) {
         Math.abs(valor*100-Math.round(valor*100)) < 0.000001, 'peso debe ser positivo con hasta dos decimales.');
       datos[campo] = valor;
     }
-    if (campo === 'imagen') datos[campo] = texto(valor, campo, 25000);
+    if (campo === 'imagen') {
+      exigir(typeof valor === 'string', 'imagen debe ser una ruta local.');
+      const ruta = valor.trim();
+      exigir(ruta.length <= 250 && (!ruta || rutaImagen(ruta)), 'imagen debe ser /productos/archivo.jpg (o png, webp, avif, gif, svg); deja vacío para usar el reemplazo.');
+      datos[campo] = imagenLocal(ruta);
+    }
     if (campo === 'atributos') {
       exigir(valor && typeof valor === 'object' && !Array.isArray(valor) && Buffer.byteLength(JSON.stringify(valor)) <= 10000,
         'atributos debe ser un objeto JSON de hasta 10 KB.');

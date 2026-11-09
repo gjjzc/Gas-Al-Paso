@@ -29,6 +29,7 @@ import { Productos } from './pages/admin/Productos.jsx';
 import { Usuarios } from './pages/admin/Usuarios.jsx';
 import { Cobertura } from './pages/admin/Cobertura.jsx';
 import { Cuadratura } from './pages/admin/Cuadratura.jsx';
+import { Clientes, ClienteDetalle } from './pages/admin/Clientes.jsx';
 import { Auditoria } from './pages/admin/Auditoria.jsx';
 function Protegida({ roles }) {
   const auth = useAuth();
@@ -135,6 +136,8 @@ export function App() {
             <Route path="cargas" element={<Cargas />} />
             <Route path="productos" element={<Productos />} />
             <Route path="usuarios" element={<Usuarios />} />
+            <Route path="clientes" element={<Clientes />} />
+            <Route path="clientes/:id" element={<ClienteDetalle />} />
             <Route path="cobertura" element={<Cobertura />} />
             <Route path="cuadratura" element={<Cuadratura />} />
             <Route path="auditoria" element={<Auditoria />} />

@@ -1,3 +1,4 @@
+import { ImagenProducto } from '../components/ImagenProducto.jsx';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/Auth.jsx';
@@ -112,6 +113,7 @@ export function Catalogo() {
             <h2>Todo listo para tu hogar</h2>
             <p className="muted">
               Balones y accesorios. Precios en pesos chilenos.
+              Imágenes generadas de referencia.
             </p>
           </div>
           <label className="buscador">
@@ -163,7 +165,7 @@ export function Catalogo() {
                         Favorito del hogar
                       </span>
                     )}
-                    <Balon peso={p.peso} accesorio={p.categoria !== 'GAS'} />
+                    <ImagenProducto producto={p} />
                     <span className={`stock ${p.stock > 0 ? '' : 'sin-stock'}`}>
                       {p.stock > 0 ? '● Disponible' : 'Sin stock'}
                     </span>

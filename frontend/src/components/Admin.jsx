@@ -1,3 +1,4 @@
+import { ImagenProducto } from './ImagenProducto.jsx';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useConsulta } from '../hooks/useConsulta.js';
@@ -14,6 +15,7 @@ export function LayoutAdmin() {
           <NavLink to="/admin/cargas">Cargas diarias</NavLink>
           <NavLink to="/admin/productos">Productos</NavLink>
           <NavLink to="/admin/usuarios">Usuarios</NavLink>
+          <NavLink to="/admin/clientes">Clientes por teléfono</NavLink>
           <NavLink to="/admin/cobertura">Comunas de reparto</NavLink>
           <NavLink to="/admin/cuadratura">Cuadratura</NavLink>
           <NavLink to="/admin/auditoria">Auditoría</NavLink>
@@ -133,7 +135,7 @@ export function SelectorItems({
             {productos.map((p) => (
               <Tarjeta as="article" key={p.id_producto}>
                 <div>
-                  <h3>{p.nombre}</h3>
+                  <ImagenProducto producto={p} className="foto-mini" /><h3>{p.nombre}</h3>
                   <p className="nota">
                     {clp(p.precio)} · Stock empresa: {p.stock}
                   </p>

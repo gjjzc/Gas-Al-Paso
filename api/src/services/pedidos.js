@@ -1,3 +1,4 @@
+import { conImagenes } from './imagenes.js';
 import { mongoDb, conectarMongo } from '../config/databases.js';
 import { consultar, conConexion, transaccion } from './oracle.js';
 import { leerPedido } from './ventas.js';
@@ -16,11 +17,11 @@ async function cargar(c, id, bloquear = false) {
   exigir(venta, 'Pedido no encontrado.', 404);
   const pedido = await leerPedido(c, venta.id_venta);
   // Incluso las fixtures antiguas toman cantidades/precios del detalle relacional.
-  const nombres = new Map((pedido.items || []).map(item => [item.id_producto, item.nombre]));
+  const anteriores = new Map((pedido.items || []).map(item => [item.id_producto, item]));
   const detalles = await consultar(c, `SELECT d.id_producto,d.cantidad,d.precio_unitario,p.nombre
     FROM Detalle_venta d JOIN Productos p ON p.id_producto=d.id_producto
     WHERE d.id_venta=:id ORDER BY d.id_producto`, { id: venta.id_venta });
-  const items = detalles.map(item => ({ ...item, nombre: nombres.get(item.id_producto) || item.nombre }));
+  const items = await conImagenes(detalles.map(item => ({ ...item, nombre: anteriores.get(item.id_producto)?.nombre || item.nombre, imagen: anteriores.get(item.id_producto)?.imagen })));
   return { venta, pedido: { ...pedido, _id: id, id_venta: venta.id_venta, items,
     cliente: { ...pedido.cliente, id_cliente: venta.id_cliente }, subtotal: venta.subtotal, descuento: venta.descuento, total: venta.total_venta,
     estado_pago: venta.estado_pago, metodo_pago: venta.estado_pago === 'COBRADA' ? venta.metodo_pago : null } };

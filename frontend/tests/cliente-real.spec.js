@@ -1,3 +1,4 @@
+import { telefonoPrueba } from './datos.js';
 import { test, expect } from '@playwright/test';
 test.skip(
   !process.env.E2E_REAL,
@@ -60,7 +61,7 @@ test('cliente real: registro, descuento, reintento sin duplicar, seguimiento y c
   );
   await page.goto('/registro');
   await page.getByLabel('Nombre completo').fill(`Cliente UI ${marca}`);
-  await page.getByLabel('Teléfono').fill('+56912345678');
+  await page.getByLabel('Teléfono').fill(telefonoPrueba());
   await page
     .getByLabel('Correo electrónico')
     .fill(`cliente-ui-${marca}@demo.test`);

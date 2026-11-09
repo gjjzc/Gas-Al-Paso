@@ -1,3 +1,4 @@
+import { telefonoPrueba } from './datos.js';
 import { test, expect } from '@playwright/test';
 test.skip(!process.env.E2E_REAL, 'Activar E2E_REAL=1 para usar bases demo.');
 async function pedir(request, method, ruta, body, token, estado) {
@@ -86,7 +87,7 @@ test('jornada completa móvil: entrega real, tarreo, ventas y cierre sin duplica
     email: `cliente-${d.marca}@demo.test`,
     password: d.clave,
     nombre: 'Cliente Jornada',
-    telefono: '+56912345678',
+    telefono: telefonoPrueba(),
     direccion_principal: 'Calle Jornada 123',
     id_comuna: 1,
   });
